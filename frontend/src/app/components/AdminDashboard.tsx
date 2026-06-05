@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../context/WalletContext';
-import { 
-  Users, Activity, Database, Terminal, Bell, Lock, Unlock, Trash2, 
-  Check, X, AlertTriangle, Cpu, Layers, HardDrive, ShieldAlert, 
-  RotateCcw, Play, Power, AlertCircle 
+import {
+  Users, Activity, Database, Terminal, Bell, Lock, Unlock, Trash2,
+  Check, X, AlertTriangle, Cpu, Layers, HardDrive, ShieldAlert,
+  RotateCcw, Play, Power, AlertCircle
 } from 'lucide-react';
 
 interface SimulatedUser {
@@ -40,15 +40,63 @@ export function AdminDashboard() {
   // Active Sidebar Tab State
   const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'transactions' | 'monitoring' | 'logs' | 'notifications'>('dashboard');
 
+  // Helper functions to sync with localStorage
+  const syncLocalStorageUserStatus = (userId: string, status: 'ACTIVE' | 'LOCKED') => {
+    try {
+      const reg = localStorage.getItem('registered_users');
+      if (reg) {
+        const parsed = JSON.parse(reg);
+        const next = parsed.map((u: any) => u.id === userId ? { ...u, walletStatus: status } : u);
+        localStorage.setItem('registered_users', JSON.stringify(next));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const deleteLocalStorageUser = (userId: string) => {
+    try {
+      const reg = localStorage.getItem('registered_users');
+      if (reg) {
+        const parsed = JSON.parse(reg);
+        const next = parsed.filter((u: any) => u.id !== userId);
+        localStorage.setItem('registered_users', JSON.stringify(next));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   // Simulated State Data
-  const [users, setUsers] = useState<SimulatedUser[]>([
-    { id: 'WL-8802-9901', name: 'ANDO TADAO', phone: '+81-3-3408-1111', status: 'ACTIVE', balance: 254800.00, lastActivity: '2 mins ago' },
-    { id: 'WL-8802-9902', name: 'KENGO KUMA', phone: '+81-3-3476-4444', status: 'ACTIVE', balance: 189250.50, lastActivity: '15 mins ago' },
-    { id: 'WL-8802-9903', name: 'TOYO ITO', phone: '+81-3-3450-5555', status: 'ACTIVE', balance: 98400.00, lastActivity: '1 hour ago' },
-    { id: 'WL-8802-9904', name: 'SHIGERU BAN', phone: '+81-3-3490-6666', status: 'ACTIVE', balance: 45000.00, lastActivity: '4 hours ago' },
-    { id: 'WL-8802-9905', name: 'SANAA STUDIO', phone: '+81-3-3430-7777', status: 'ACTIVE', balance: 320600.00, lastActivity: '5 mins ago' },
-    { id: 'WL-8802-9906', name: 'ARATA ISOZAKI', phone: '+81-3-3420-8888', status: 'LOCKED', balance: 12300.00, lastActivity: '3 days ago' },
-  ]);
+  const [users, setUsers] = useState<SimulatedUser[]>(() => {
+    const defaultUsers: SimulatedUser[] = [
+      { id: 'WL-8802-9901', name: 'ANDO TADAO', phone: '+81-3-3408-1111', status: 'ACTIVE', balance: 254800.00, lastActivity: '2 mins ago' },
+      { id: 'WL-8802-9902', name: 'KENGO KUMA', phone: '+81-3-3476-4444', status: 'ACTIVE', balance: 189250.50, lastActivity: '15 mins ago' },
+      { id: 'WL-8802-9903', name: 'TOYO ITO', phone: '+81-3-3450-5555', status: 'ACTIVE', balance: 98400.00, lastActivity: '1 hour ago' },
+      { id: 'WL-8802-9904', name: 'SHIGERU BAN', phone: '+81-3-3490-6666', status: 'ACTIVE', balance: 45000.00, lastActivity: '4 hours ago' },
+      { id: 'WL-8802-9905', name: 'SANAA STUDIO', phone: '+81-3-3430-7777', status: 'ACTIVE', balance: 320600.00, lastActivity: '5 mins ago' },
+      { id: 'WL-8802-9906', name: 'ARATA ISOZAKI', phone: '+81-3-3420-8888', status: 'LOCKED', balance: 12300.00, lastActivity: '3 days ago' },
+    ];
+    try {
+      const reg = localStorage.getItem('registered_users');
+      if (reg) {
+        const parsed = JSON.parse(reg);
+        const mapped = parsed.map((u: any) => ({
+          id: u.id,
+          name: u.name || u.fullName,
+          phone: u.phone,
+          status: u.walletStatus || 'ACTIVE',
+          balance: u.balance || 10000.00,
+          lastActivity: u.lastActivity || 'Just registered'
+        }));
+        const filtered = mapped.filter((mu: any) => !defaultUsers.some(du => du.id === mu.id || du.phone === mu.phone));
+        return [...defaultUsers, ...filtered];
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return defaultUsers;
+  });
 
   const [suspiciousTxns, setSuspiciousTxns] = useState<SuspiciousTransaction[]>([
     { id: 'TXN-101', type: 'send', amount: 12500.00, initiator: 'TOYO ITO', counterparty: 'UNKNOWN OFFSHORE BANK', reason: 'DEBIT TRANSFER TO UNREGISTERED LEDGER', status: 'PENDING REVIEW', timestamp: '12 mins ago' },
@@ -90,7 +138,7 @@ export function AdminDashboard() {
 
   // JWT expiry interval countdown & redirection
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     if (sessionExpired) {
       triggerNotification("Session expired - JWT invalidated");
       interval = setInterval(() => {
@@ -116,6 +164,7 @@ export function AdminDashboard() {
   const executeLockUser = () => {
     if (userToLock) {
       setUsers(prev => prev.map(u => u.id === userToLock.id ? { ...u, status: 'LOCKED' } : u));
+      syncLocalStorageUserStatus(userToLock.id, 'LOCKED');
       triggerNotification(`Wallet locked: ${userToLock.name}`);
       setAuditLogs(prev => [`LOG-899: Operator revoked credentials & blacklisted token for user ${userToLock.id}`, ...prev]);
     }
@@ -125,12 +174,14 @@ export function AdminDashboard() {
 
   const handleUnlockUser = (user: SimulatedUser) => {
     setUsers(prev => prev.map(u => u.id === user.id ? { ...u, status: 'ACTIVE' } : u));
+    syncLocalStorageUserStatus(user.id, 'ACTIVE');
     triggerNotification(`Wallet unlocked: ${user.name}`);
     setAuditLogs(prev => [`LOG-900: Operator restored credentials for user ${user.id}`, ...prev]);
   };
 
   const handleDeleteUser = (userId: string, userName: string) => {
     setUsers(prev => prev.filter(u => u.id !== userId));
+    deleteLocalStorageUser(userId);
     triggerNotification(`Record deleted: ${userName}`);
     setAuditLogs(prev => [`LOG-901: Operator purged user record for index ID ${userId}`, ...prev]);
   };
@@ -168,7 +219,7 @@ export function AdminDashboard() {
 
   return (
     <div className="w-full max-w-[1440px] mx-auto min-h-[1024px] bg-stone-white flex flex-col md:flex-row border-x border-grid-line font-sans relative select-none">
-      
+
       {/* MONOLITHIC SIDEBAR: Deep Charcoal, sharp 0px corners, high-contrast, minimalist */}
       <aside className="w-full md:w-[280px] bg-charcoal-black border-r border-grid-line text-stone-white flex flex-col justify-between p-8 shrink-0 rounded-none z-10">
         <div className="space-y-12">
@@ -187,11 +238,10 @@ export function AdminDashboard() {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`text-[12px] font-bold tracking-[0.2em] uppercase py-3 transition-all duration-100 flex items-center gap-3 cursor-pointer text-left w-full rounded-none ${
-                  activeTab === tab
+                className={`text-[12px] font-bold tracking-[0.2em] uppercase py-3 transition-all duration-100 flex items-center gap-3 cursor-pointer text-left w-full rounded-none ${activeTab === tab
                     ? 'text-stone-white border-l-2 border-stone-white pl-4 -ml-4 font-black'
                     : 'text-medium-concrete hover:text-stone-white pl-0'
-                }`}
+                  }`}
               >
                 {tab === 'dashboard' && <Activity className="w-4 h-4" />}
                 {tab === 'users' && <Users className="w-4 h-4" />}
@@ -209,7 +259,7 @@ export function AdminDashboard() {
         <div className="space-y-6 pt-8 border-t border-stone-white/10 mt-12">
           <div className="space-y-1">
             <div className="text-[10px] uppercase tracking-wider text-medium-concrete font-semibold">LOGGED AS OPERATOR</div>
-            <div className="text-[12px] font-bold uppercase tracking-wider font-mono">ANDO TADAO [ROOT]</div>
+            <div className="text-[12px] font-bold uppercase tracking-wider font-mono">SYSTEM ADMINISTRATOR [ROOT]</div>
           </div>
 
           <button
@@ -224,7 +274,7 @@ export function AdminDashboard() {
       {/* ADMIN RIGHT SIDEBAR/CONTENT AREA: Resolution targeted 1440x1024 */}
       <main className="flex-1 p-10 flex flex-col justify-between overflow-x-hidden min-h-[1024px]">
         <div className="space-y-10">
-          
+
           {/* Header Submenu Indicator */}
           <div className="flex justify-between items-end border-b border-grid-line pb-6">
             <div className="space-y-1">
@@ -244,10 +294,10 @@ export function AdminDashboard() {
               ======================================================== */}
           {activeTab === 'dashboard' && (
             <div className="space-y-10">
-              
+
               {/* ADMIN METRICS SLABS: Oversized, raw, brutalist architectural layout */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
                 {/* Slab 1 */}
                 <div className="border border-grid-line p-8 bg-stone-white flex flex-col justify-between h-40 rounded-none relative">
                   <span className="text-[11px] uppercase tracking-[0.2em] text-medium-concrete font-bold">TOTAL CONTROL USERS</span>
@@ -267,16 +317,8 @@ export function AdminDashboard() {
                 {/* Slab 3 */}
                 <div className="border border-grid-line p-8 bg-stone-white flex flex-col justify-between h-40 rounded-none relative">
                   <span className="text-[11px] uppercase tracking-[0.2em] text-medium-concrete font-bold">TRANSACTION BALANCE VOL</span>
-                  <div className="text-[44px] font-black tracking-tight text-charcoal-black font-mono leading-none">
+                  <div className="text-[44px] font-black tracking-tight text-charcoal-black font-mono leading-none whitespace-normal break-words overflow-hidden">
                     ${metrics.txnVolume.toLocaleString('en-US', { maximumFractionDigits: 0 })}
-                  </div>
-                </div>
-
-                {/* Slab 4 */}
-                <div className="border border-grid-line p-8 bg-stone-white flex flex-col justify-between h-40 rounded-none relative">
-                  <span className="text-[11px] uppercase tracking-[0.2em] text-medium-concrete font-bold">SUSPICIOUS EVENTS</span>
-                  <div className="text-[44px] font-black tracking-tight text-error font-mono leading-none">
-                    {metrics.suspicious} <span className="text-[12px] font-bold text-medium-concrete uppercase tracking-widest">ALERT</span>
                   </div>
                 </div>
 
@@ -285,9 +327,9 @@ export function AdminDashboard() {
               {/* FUTURE EXTENSION VISUAL PLACEHOLDERS: Redis, RabbitMQ, Docker containers */}
               <div className="space-y-6">
                 <div className="text-[11px] uppercase tracking-[0.2em] text-medium-concrete font-bold">INFRASTRUCTURE STATUS (FUTURE EXTENSIONS)</div>
-                
+
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  
+
                   {/* Redis Monitor */}
                   <div className="border border-grid-line p-6 bg-stone-white space-y-4 rounded-none">
                     <div className="flex justify-between items-center border-b border-grid-line pb-3">
@@ -383,7 +425,7 @@ export function AdminDashboard() {
               ======================================================== */}
           {activeTab === 'users' && (
             <div className="space-y-6">
-              
+
               {/* User management container */}
               <div className="border border-grid-line bg-stone-white">
                 <div className="hidden md:grid grid-cols-[140px_1fr_150px_110px_140px_110px_200px] gap-4 p-6 bg-concrete-gray border-b border-grid-line text-[11px] uppercase tracking-[0.2em] font-bold text-charcoal-black">
@@ -399,9 +441,8 @@ export function AdminDashboard() {
                 {users.map((user, index) => (
                   <div
                     key={user.id}
-                    className={`grid grid-cols-1 md:grid-cols-[140px_1fr_150px_110px_140px_110px_200px] gap-4 p-6 hover:bg-[#EAEAEA]/40 items-center text-[13px] ${
-                      index < users.length - 1 ? 'border-b border-grid-line' : ''
-                    }`}
+                    className={`grid grid-cols-1 md:grid-cols-[140px_1fr_150px_110px_140px_110px_200px] gap-4 p-6 hover:bg-[#EAEAEA]/40 items-center text-[13px] ${index < users.length - 1 ? 'border-b border-grid-line' : ''
+                      }`}
                   >
                     {/* User ID */}
                     <div className="font-mono text-medium-concrete font-bold text-[12px]">
@@ -421,11 +462,10 @@ export function AdminDashboard() {
                     {/* Status */}
                     <div>
                       <span
-                        className={`text-[10px] font-bold uppercase px-3.5 py-1.5 tracking-wider border rounded-none ${
-                          user.status === 'ACTIVE'
+                        className={`text-[10px] font-bold uppercase px-3.5 py-1.5 tracking-wider border rounded-none ${user.status === 'ACTIVE'
                             ? 'border-success text-success bg-success/5'
                             : 'border-error text-error bg-error/5'
-                        }`}
+                          }`}
                       >
                         {user.status}
                       </span>
@@ -458,7 +498,7 @@ export function AdminDashboard() {
                           <Unlock className="w-3.5 h-3.5" /> UNLOCK
                         </button>
                       )}
-                      
+
                       <button
                         onClick={() => handleDeleteUser(user.id, user.name)}
                         className="px-3.5 py-2 border border-grid-line hover:border-error hover:text-error text-medium-concrete font-extrabold text-[10px] tracking-widest uppercase rounded-none transition-colors duration-100 cursor-pointer"
@@ -479,7 +519,7 @@ export function AdminDashboard() {
               ======================================================== */}
           {activeTab === 'transactions' && (
             <div className="space-y-6">
-              
+
               {/* Transactions grid */}
               <div className="border border-grid-line bg-stone-white">
                 <div className="hidden md:grid grid-cols-[110px_1fr_200px_150px_140px] gap-6 p-6 bg-concrete-gray border-b border-grid-line text-[11px] uppercase tracking-[0.2em] font-bold text-charcoal-black">
@@ -498,21 +538,20 @@ export function AdminDashboard() {
                   transactions.map((t, index) => (
                     <div
                       key={t.id}
-                      className={`grid grid-cols-1 md:grid-cols-[110px_1fr_200px_150px_140px] gap-4 p-6 hover:bg-[#EAEAEA]/40 items-center text-[13px] ${
-                        index < transactions.length - 1 ? 'border-b border-grid-line' : ''
-                      }`}
+                      className={`grid grid-cols-1 md:grid-cols-[110px_1fr_200px_150px_140px] gap-4 p-6 hover:bg-[#EAEAEA]/40 items-center text-[13px] ${index < transactions.length - 1 ? 'border-b border-grid-line' : ''
+                        }`}
                     >
                       {/* ID */}
                       <span className="font-mono text-medium-concrete font-bold text-[12px]">#{t.id}</span>
-                      
+
                       {/* Flow */}
                       <div className="flex items-center gap-4">
                         <span className="font-bold text-charcoal-black truncate uppercase max-w-[150px]">
-                          {t.type === 'receive' ? t.sender : 'YOU (ANDO)'}
+                          {t.type === 'receive' ? t.sender : 'SYSTEM'}
                         </span>
                         <span className="text-medium-concrete font-mono">{"──>"}</span>
                         <span className="font-bold text-charcoal-black truncate uppercase max-w-[150px]">
-                          {t.type === 'send' ? t.recipient : 'YOU (ANDO)'}
+                          {t.type === 'send' ? t.recipient : 'SYSTEM'}
                         </span>
                       </div>
 
@@ -545,7 +584,7 @@ export function AdminDashboard() {
               ======================================================== */}
           {activeTab === 'monitoring' && (
             <div className="space-y-6">
-              
+
               <div className="text-[11px] uppercase tracking-[0.2em] text-medium-concrete font-bold">SUSPICIOUS TRANSACTION AUDIT QUEUE</div>
 
               {/* Geometric queue */}
@@ -561,13 +600,12 @@ export function AdminDashboard() {
 
                 {suspiciousTxns.map((txn, index) => {
                   const isSuspicious = txn.status === 'PENDING REVIEW' || txn.status === 'FLAGGED';
-                  
+
                   return (
                     <div
                       key={txn.id}
-                      className={`grid grid-cols-1 md:grid-cols-[100px_1fr_220px_150px_130px_240px] gap-4 p-6 items-center text-[13px] transition-colors duration-100 ${
-                        index < suspiciousTxns.length - 1 ? 'border-b border-grid-line' : ''
-                      } ${isSuspicious ? 'bg-[#8B8371]/10 hover:bg-[#8B8371]/15' : 'hover:bg-[#EAEAEA]/30'}`}
+                      className={`grid grid-cols-1 md:grid-cols-[100px_1fr_220px_150px_130px_240px] gap-4 p-6 items-center text-[13px] transition-colors duration-100 ${index < suspiciousTxns.length - 1 ? 'border-b border-grid-line' : ''
+                        } ${isSuspicious ? 'bg-[#8B8371]/10 hover:bg-[#8B8371]/15' : 'hover:bg-[#EAEAEA]/30'}`}
                     >
                       {/* TXN Ref */}
                       <span className="font-mono text-medium-concrete font-bold text-[12px]">{txn.id}</span>
@@ -585,12 +623,11 @@ export function AdminDashboard() {
 
                       {/* Status */}
                       <div>
-                        <span className={`text-[10px] font-bold uppercase px-3 py-1 border rounded-none ${
-                          txn.status === 'APPROVED' ? 'border-success text-success bg-success/5' :
-                          txn.status === 'REJECTED' ? 'border-error text-error bg-error/5' :
-                          txn.status === 'FLAGGED' ? 'border-[#8B8371] text-[#8B8371] bg-[#8B8371]/5' :
-                          'border-charcoal-black text-charcoal-black bg-stone-white'
-                        }`}>
+                        <span className={`text-[10px] font-bold uppercase px-3 py-1 border rounded-none ${txn.status === 'APPROVED' ? 'border-success text-success bg-success/5' :
+                            txn.status === 'REJECTED' ? 'border-error text-error bg-error/5' :
+                              txn.status === 'FLAGGED' ? 'border-[#8B8371] text-[#8B8371] bg-[#8B8371]/5' :
+                                'border-charcoal-black text-charcoal-black bg-stone-white'
+                          }`}>
                           {txn.status}
                         </span>
                       </div>
@@ -644,9 +681,9 @@ export function AdminDashboard() {
               ======================================================== */}
           {activeTab === 'logs' && (
             <div className="space-y-6">
-              
+
               <div className="text-[11px] uppercase tracking-[0.2em] text-medium-concrete font-bold">SYSTEM AUDIT TERMINAL FEED (LIVE)</div>
-              
+
               <div className="border border-grid-line bg-charcoal-black text-stone-white p-8 font-mono text-[12px] space-y-3 leading-relaxed rounded-none min-h-[400px]">
                 <div className="text-medium-concrete border-b border-stone-white/10 pb-2 mb-4 uppercase tracking-widest text-[10px]">
                   ARCHIVAL AUDIT FEED ──── OUTPUT TERMINAL
@@ -673,7 +710,7 @@ export function AdminDashboard() {
               ======================================================== */}
           {activeTab === 'notifications' && (
             <div className="space-y-6">
-              
+
               <div className="text-[11px] uppercase tracking-[0.2em] text-medium-concrete font-bold">SYSTEM TOAST DISPATCH BOARD</div>
 
               <div className="border border-grid-line p-8 bg-stone-white rounded-none max-w-xl space-y-6">
@@ -771,7 +808,7 @@ export function AdminDashboard() {
                 <AlertTriangle className="w-6 h-6" />
                 <span className="text-[12px] font-black uppercase tracking-[0.25em]">CRITICAL REVOCATION ALERT</span>
               </div>
-              
+
               <div className="space-y-2">
                 <h3 className="text-[18px] font-extrabold uppercase tracking-wide">
                   LOCK USER ACCOUNT?

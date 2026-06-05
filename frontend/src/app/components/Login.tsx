@@ -29,34 +29,122 @@ export function Login() {
 
     await new Promise((resolve) => setTimeout(resolve, 1100));
 
-    if (phone.trim() === PHONE_LOCKED_VALUE) {
-      setFormMessage('Wallet is locked');
-      setPhoneError(' ');
-      setPasswordError(' ');
-    } else if (!/^[+]?\d[\d\s-]{7,}$/i.test(phone.trim())) {
-      setFormMessage('Phone number not found');
-      setPhoneError(' ');
-    } else if (password !== 'wallet123') {
-      setFormMessage('Incorrect password');
-      setPasswordError(' ');
+    const input = phone.trim();
+    const isEmailInput = input.includes('@');
+
+    // 1. Validation check
+    if (isEmailInput) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input)) {
+        setFormMessage('Invalid email format');
+        setPhoneError(' ');
+        setLoading(false);
+        return;
+      }
     } else {
-      // Determine role: admin vs normal user
-      const isAdmin = phone.trim() === ADMIN_PHONE && password === ADMIN_PASSWORD;
-      const role = isAdmin ? 'admin' : 'user';
-      const name = isAdmin ? 'ADMIN' : 'ANDO TADAO';
+      if (!/^[+]?\d[\d\s-]{7,}$/i.test(input)) {
+        setFormMessage('Phone number not found');
+        setPhoneError(' ');
+        setLoading(false);
+        return;
+      }
+    }
 
-      login({ name, phone: phone.trim(), role });
+    // 2. Admin Check
+    const isAdmin = (isEmailInput && input.toLowerCase() === 'admin@wallet.com' && password === ADMIN_PASSWORD) ||
+      (!isEmailInput && input === ADMIN_PHONE && password === ADMIN_PASSWORD);
 
+    if (isAdmin) {
+      login({
+        name: 'ADMIN',
+        phone: ADMIN_PHONE,
+        email: 'admin@wallet.com',
+        role: 'admin',
+        walletId: 'WL-ADMIN-ROOT',
+        memberSince: 'JAN 2025',
+        walletStatus: 'ACTIVE'
+      });
       setFormMessage('');
       setPhone('');
       setPassword('');
+      navigate('/admin');
+      setLoading(false);
+      return;
+    }
 
-      // Redirect based on role
-      if (isAdmin) {
-        navigate('/admin');
+    // 3. Registered User Check (from localStorage)
+    let foundUser: any = null;
+    try {
+      const regUsers = JSON.parse(localStorage.getItem('registered_users') || '[]');
+      if (isEmailInput) {
+        foundUser = regUsers.find((u: any) => u.email?.toLowerCase() === input.toLowerCase());
       } else {
+        // Normalize phone numbers to compare (remove spaces, dashes, etc.)
+        const normalizedInput = input.replace(/[\s-()]/g, '');
+        foundUser = regUsers.find((u: any) => u.phone?.replace(/[\s-()]/g, '') === normalizedInput);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
+    if (foundUser) {
+      if (foundUser.password !== password) {
+        setFormMessage('Incorrect password');
+        setPasswordError(' ');
+      } else if (foundUser.walletStatus === 'LOCKED') {
+        setFormMessage('Wallet is locked');
+        setPhoneError(' ');
+        setPasswordError(' ');
+      } else {
+        login({
+          name: foundUser.name || foundUser.fullName,
+          phone: foundUser.phone,
+          email: foundUser.email,
+          role: foundUser.role || 'user',
+          walletId: foundUser.id,
+          accountType: foundUser.accountType || 'STANDARD',
+          walletStatus: foundUser.walletStatus || 'ACTIVE',
+          memberSince: foundUser.memberSince || 'JAN 2025'
+        });
+        setFormMessage('');
+        setPhone('');
+        setPassword('');
         navigate('/dashboard');
       }
+      setLoading(false);
+      return;
+    }
+
+    // 4. Default Fallback User Check
+    const isDefaultUser = (isEmailInput && input.toLowerCase() === 'hello@wallet.com') ||
+      (!isEmailInput && (input === '+84 123 456 789' || input === '123456789' || input.replace(/[\s-()]/g, '').endsWith('123456789')));
+
+    if (input === PHONE_LOCKED_VALUE || (isEmailInput && input.toLowerCase() === 'locked@wallet.com')) {
+      setFormMessage('Wallet is locked');
+      setPhoneError(' ');
+      setPasswordError(' ');
+    } else if (isDefaultUser || (!isEmailInput && /^[+]?\d[\d\s-]{7,}$/i.test(input))) {
+      // If matches default user, or if password matches fallback password 'wallet123'
+      if (password !== 'wallet123') {
+        setFormMessage('Incorrect password');
+        setPasswordError(' ');
+      } else {
+        login({
+          name: 'ANDO TADAO',
+          phone: isEmailInput ? '+84 123 456 789' : input,
+          email: isEmailInput ? input : 'hello@wallet.com',
+          role: 'user',
+          walletId: 'WL-8802-9901',
+          memberSince: 'JAN 2025',
+          walletStatus: 'ACTIVE'
+        });
+        setFormMessage('');
+        setPhone('');
+        setPassword('');
+        navigate('/dashboard');
+      }
+    } else {
+      setFormMessage(isEmailInput ? 'Email not found' : 'Phone number not found');
+      setPhoneError(' ');
     }
 
     setLoading(false);
@@ -64,13 +152,10 @@ export function Login() {
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#e4e1dc] text-charcoal-black">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.18),transparent_18%),radial-gradient(circle_at_bottom_right,rgba(0,0,0,0.08),transparent_18%),linear-gradient(125deg,#ebe8e1,#d9d6cf)]" />
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.12),transparent_36%,rgba(0,0,0,0.05))]" />
-      <div className="relative flex min-h-screen items-center justify-center px-6 py-20">
+      <div className="relative flex justify-center px-6 py-20">
         <div
-          className={`w-full max-w-md border border-grid-line bg-stone-white/96 p-8 shadow-[0_24px_80px_rgba(0,0,0,0.08)] transition-opacity duration-200 ${
-            loading ? 'opacity-80' : 'opacity-100'
-          }`}
+          className={`w-full max-w-md border border-grid-line bg-stone-white/96 p-8 shadow-[0_24px_80px_rgba(0,0,0,0.08)] transition-opacity duration-200 ${loading ? 'opacity-80' : 'opacity-100'
+            }`}
         >
           <div className="mb-10 space-y-2">
             <div className="uppercase tracking-[0.35em] text-[11px] text-medium-concrete">Secure access</div>
@@ -79,9 +164,9 @@ export function Login() {
 
           <form onSubmit={handleSubmit} className="grid gap-6">
             <Input
-              label="Phone Number"
-              type="tel"
-              placeholder="+84 123 456 789"
+              label="Phone Number or Email"
+              type="text"
+              placeholder="hello@wallet.com or +84 123 456 789"
               value={phone}
               onChange={(event) => setPhone(event.target.value)}
               disabled={loading}
@@ -128,17 +213,14 @@ export function Login() {
             ) : null}
           </form>
 
-          <div className="relative py-6 mt-2">
-            <div className="absolute inset-x-0 top-1/2 h-px bg-grid-line" />
-            <div className="relative flex justify-center">
-              <button
-                type="button"
-                onClick={() => navigate('/register')}
-                className="bg-stone-white/96 px-4 text-[12px] uppercase tracking-[0.35em] text-charcoal-black transition-colors duration-150 hover:text-medium-concrete"
-              >
-                Create account
-              </button>
-            </div>
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => navigate('/register')}
+              className="text-[12px] uppercase tracking-[0.35em] text-charcoal-black transition-colors duration-150 hover:text-medium-concrete"
+            >
+              Create account
+            </button>
           </div>
         </div>
       </div>

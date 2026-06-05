@@ -88,6 +88,23 @@ export function Register() {
 
     setLoading(true);
     await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // Save user credentials dynamically in localStorage to support Login verification
+    const registeredUsers = JSON.parse(localStorage.getItem('registered_users') || '[]');
+    registeredUsers.push({
+      id: `WL-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`,
+      name: trimmedName,
+      fullName: trimmedName,
+      phone: trimmedPhone,
+      email: trimmedEmail,
+      password: password,
+      role: 'user',
+      balance: 10000.00,
+      walletStatus: 'ACTIVE',
+      memberSince: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    });
+    localStorage.setItem('registered_users', JSON.stringify(registeredUsers));
+
     setLoading(false);
     navigate('/login');
   };
@@ -178,18 +195,6 @@ export function Register() {
               {loading ? 'Creating account…' : 'Create Account'}
             </Button>
           </form>
-
-          <div className="relative py-6 mt-2">
-            <div className="absolute inset-x-0 top-1/2 h-px bg-grid-line" />
-            <div className="relative flex justify-center">
-              <Link
-                to="/login"
-                className="bg-stone-white/96 px-4 text-[12px] uppercase tracking-[0.35em] text-charcoal-black transition-colors duration-150 hover:text-medium-concrete"
-              >
-                Already have an account? Login
-              </Link>
-            </div>
-          </div>
         </div>
       </div>
     </main>

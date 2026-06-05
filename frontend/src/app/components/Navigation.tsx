@@ -32,13 +32,25 @@ export function Navigation() {
               <span className="text-charcoal-black font-bold">{user?.name ?? 'ANDO TADAO'}</span>
             </div>
             <span className="w-px h-4 bg-grid-line" aria-hidden="true" />
-            <span className="text-medium-concrete">ID: WL-8802-9901</span>
+            <span className="text-medium-concrete">ID: {user?.walletId ?? 'WL-8802-9901'}</span>
             <span className="w-px h-4 bg-grid-line" aria-hidden="true" />
 
             <button className="hover:text-medium-concrete transition-colors duration-100 cursor-pointer flex items-center gap-2">
               <Bell className="w-5 h-5" />
               <span className="text-[12px]">2</span>
             </button>
+
+            {user?.role === 'admin' && (
+              <>
+                <span className="w-px h-4 bg-grid-line" aria-hidden="true" />
+                <button 
+                  onClick={() => navigate('/admin')} 
+                  className="hover:text-medium-concrete text-[#8B6B6B] font-extrabold uppercase tracking-wider cursor-pointer"
+                >
+                  Admin
+                </button>
+              </>
+            )}
           </div>
 
           {/* Fixed logout button on bottom-right of screen */}

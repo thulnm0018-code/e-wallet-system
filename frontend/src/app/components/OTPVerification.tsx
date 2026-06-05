@@ -121,7 +121,7 @@ export function OTPVerification() {
                   {otp.map((digit, index) => (
                     <input
                       key={index}
-                      ref={(el) => (inputRefs.current[index] = el)}
+                      ref={(el) => { inputRefs.current[index] = el; }}
                       type="text"
                       inputMode="numeric"
                       maxLength={1}
@@ -149,18 +149,15 @@ export function OTPVerification() {
                   {loading ? 'Verifying…' : 'Verify'}
                 </Button>
 
-                <div className="relative py-4">
-                  <div className="absolute inset-x-0 top-1/2 h-px bg-grid-line" />
-                  <div className="relative flex justify-center">
-                    <button
-                      type="button"
-                      onClick={handleResend}
-                      disabled={timeLeft > 0}
-                      className="bg-stone-white/96 px-4 text-[11px] uppercase tracking-[0.35em] text-charcoal-black transition-colors duration-150 disabled:text-medium-concrete disabled:cursor-not-allowed hover:text-medium-concrete"
-                    >
-                      Resend OTP
-                    </button>
-                  </div>
+                <div className="mt-6 text-center">
+                  <button
+                    type="button"
+                    onClick={handleResend}
+                    disabled={timeLeft > 0}
+                    className="text-[11px] uppercase tracking-[0.35em] text-charcoal-black transition-colors duration-150 disabled:text-medium-concrete disabled:cursor-not-allowed hover:text-medium-concrete py-2"
+                  >
+                    Resend OTP
+                  </button>
                 </div>
               </>
             ) : (

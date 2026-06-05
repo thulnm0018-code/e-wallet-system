@@ -175,11 +175,11 @@ export function ResetPassword() {
               {loading ? 'Updating Password…' : 'Update Password'}
             </Button>
 
-            <div className="text-center">
+            <div className="text-center mt-4">
               <button
                 type="button"
                 onClick={() => navigate('/login')}
-                className="text-[11px] uppercase tracking-[0.3em] text-medium-concrete hover:text-charcoal-black transition-colors duration-150"
+                className="text-[11px] uppercase tracking-[0.3em] text-medium-concrete hover:text-charcoal-black transition-colors duration-150 py-2"
               >
                 Cancel
               </button>

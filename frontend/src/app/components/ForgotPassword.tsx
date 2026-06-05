@@ -84,11 +84,11 @@ export function ForgotPassword() {
               {loading ? 'Verifying Credentials…' : 'Continue'}
             </Button>
 
-            <div className="text-center">
+            <div className="mt-6 text-center">
               <button
                 type="button"
                 onClick={() => navigate('/login')}
-                className="text-[11px] uppercase tracking-[0.3em] text-medium-concrete hover:text-charcoal-black transition-colors duration-150"
+                className="text-[11px] uppercase tracking-[0.3em] text-medium-concrete hover:text-charcoal-black transition-colors duration-150 py-2"
               >
                 Back to Login
               </button>
