@@ -3,6 +3,7 @@ package com.ewallet.backend.service.impl;
 import com.ewallet.backend.dto.request.UserCreateRequest;
 import com.ewallet.backend.entity.User;
 import com.ewallet.backend.entity.Wallet;
+import com.ewallet.backend.exception.ResourceConflictException;
 import com.ewallet.backend.repository.UserRepository;
 import com.ewallet.backend.service.UserService;
 
@@ -15,8 +16,8 @@ import java.math.BigDecimal;
 @Service
 public class UserServiceImpl implements UserService {
 
-    private final UserRepository userRepository;  // dung de tuong tac voi database, luu tru user va truy van user
-    private final PasswordEncoder passwordEncoder; // dependency injection, de ma hoa mat khau truoc khi luu vao database
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
     public UserServiceImpl(UserRepository userRepository,
                            PasswordEncoder passwordEncoder) {
@@ -27,26 +28,49 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public void registerUser(UserCreateRequest request) {
-
-        if (userRepository.existsByPhone(request.getPhone())) {
-            throw new RuntimeException("Số điện thoại đã tồn tại");
+        if (request == null) {
+            throw new IllegalArgumentException("Registration request must not be null");
         }
 
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("Email đã tồn tại");
+        String name = request.getName() == null ? null : request.getName().trim();
+        String email = request.getEmail() == null ? null : request.getEmail().trim().toLowerCase();
+        String phone = request.getPhone() == null ? null : request.getPhone().trim();
+        String password = request.getPassword();
+
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Name is required");
+        }
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Email is required");
+        }
+        if (phone == null || phone.isBlank()) {
+            throw new IllegalArgumentException("Phone number is required");
+        }
+        if (password == null || password.length() < 8) {
+            throw new IllegalArgumentException("Password must be at least 8 characters long");
         }
 
-        String hash = passwordEncoder.encode(request.getPassword());
+        if (userRepository.existsByPhone(phone)) {
+            throw new ResourceConflictException("Phone number already registered");
+        }
+        if (userRepository.existsByEmail(email)) {
+            throw new ResourceConflictException("Email already registered");
+        }
+
+        String hash = passwordEncoder.encode(password);
 
         User user = new User();
-        user.setName(request.getName());  // lay (get) tu request, sau do gan (set) vao user entity
-        user.setEmail(request.getEmail());
-        user.setPhone(request.getPhone());
+        user.setName(name);
+        user.setEmail(email);
+        user.setPhone(phone);
         user.setPasswordHash(hash);
+        user.setRole(User.Role.USER);
+        user.setUserStatus(User.UserStatus.ACTIVE);
 
         Wallet wallet = new Wallet();
         wallet.setUser(user);
         wallet.setBalance(BigDecimal.ZERO);
+        wallet.setWalletStatus(Wallet.WalletStatus.ACTIVE);
 
         user.setWallet(wallet);
 
