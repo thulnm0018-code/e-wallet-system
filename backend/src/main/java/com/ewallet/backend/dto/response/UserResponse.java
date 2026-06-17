@@ -14,7 +14,7 @@ public class UserResponse {
     private String phone;
     private LocalDateTime createdAt;
 
-    public static UserResponse fromEntity(User user) {
+    public static UserResponse fromEntity(User user) {  // Convert User entity to UserResponse DTO
         if (user == null) return null;
         
         return UserResponse.builder()

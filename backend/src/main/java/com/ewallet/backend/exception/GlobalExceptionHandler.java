@@ -56,4 +56,12 @@ public class GlobalExceptionHandler {
                         .message("Internal Server Error")
                         .build());
     }
+
+    @ExceptionHandler(UnauthorizedException.class)
+public ResponseEntity<ApiResponse<Void>> handleUnauthorized(UnauthorizedException ex) {
+    return ResponseEntity.status(401)
+            .body(ApiResponse.<Void>builder()
+                    .message(ex.getMessage())
+                    .build());
+}
 }

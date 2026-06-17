@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from './Button';
@@ -27,12 +28,9 @@ export function Login() {
     setFormMessage('');
     setLoading(true);
 
-    await new Promise((resolve) => setTimeout(resolve, 1100));
-
     const input = phone.trim();
     const isEmailInput = input.includes('@');
 
-    // 1. Validation check
     if (isEmailInput) {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input)) {
         setFormMessage('Invalid email format');
@@ -49,7 +47,6 @@ export function Login() {
       }
     }
 
-    // 2. Admin Check
     const isAdmin = (isEmailInput && input.toLowerCase() === 'admin@wallet.com' && password === ADMIN_PASSWORD) ||
       (!isEmailInput && input === ADMIN_PHONE && password === ADMIN_PASSWORD);
 
@@ -71,83 +68,51 @@ export function Login() {
       return;
     }
 
-    // 3. Registered User Check (from localStorage)
-    let foundUser: any = null;
     try {
-      const regUsers = JSON.parse(localStorage.getItem('registered_users') || '[]');
-      if (isEmailInput) {
-        foundUser = regUsers.find((u: any) => u.email?.toLowerCase() === input.toLowerCase());
-      } else {
-        // Normalize phone numbers to compare (remove spaces, dashes, etc.)
-        const normalizedInput = input.replace(/[\s-()]/g, '');
-        foundUser = regUsers.find((u: any) => u.phone?.replace(/[\s-()]/g, '') === normalizedInput);
-      }
-    } catch (e) {
-      console.error(e);
-    }
+      const response = await axios.post('http://localhost:8080/api/auth/login', {
+        identifier: input,
+        password: password,
+      });
 
-    if (foundUser) {
-      if (foundUser.password !== password) {
-        setFormMessage('Incorrect password');
-        setPasswordError(' ');
-      } else if (foundUser.walletStatus === 'LOCKED') {
-        setFormMessage('Wallet is locked');
-        setPhoneError(' ');
-        setPasswordError(' ');
+      const authData = response.data.data;
+
+      localStorage.setItem('accessToken', authData.accessToken);
+      localStorage.setItem('refreshToken', authData.refreshToken);
+
+      login({
+        name: authData.user.name,
+        phone: authData.user.phone,
+        email: authData.user.email,
+        role: 'user',
+        walletId: authData.user.id.toString(),
+        accountType: 'STANDARD',
+        walletStatus: 'ACTIVE',
+        memberSince: authData.user.createdAt || 'JUN 2026'
+      });
+
+      setFormMessage('');
+      setPhone('');
+      setPassword('');
+      navigate('/dashboard');
+    } catch (error: any) {
+      if (error.response && error.response.data) {
+        const serverResponse = error.response.data;
+        if (serverResponse.data && typeof serverResponse.data === 'object') {
+          const errorsMap = serverResponse.data;
+          if (errorsMap.identifier) setPhoneError(errorsMap.identifier);
+          if (errorsMap.password) setPasswordError(errorsMap.password);
+          setFormMessage('Please correct the highlighted errors.');
+        } else if (serverResponse.message) {
+          setFormMessage(serverResponse.message);
+        } else {
+          setFormMessage('Login failed. Please try again.');
+        }
       } else {
-        login({
-          name: foundUser.name || foundUser.fullName,
-          phone: foundUser.phone,
-          email: foundUser.email,
-          role: foundUser.role || 'user',
-          walletId: foundUser.id,
-          accountType: foundUser.accountType || 'STANDARD',
-          walletStatus: foundUser.walletStatus || 'ACTIVE',
-          memberSince: foundUser.memberSince || 'JAN 2025'
-        });
-        setFormMessage('');
-        setPhone('');
-        setPassword('');
-        navigate('/dashboard');
+        setFormMessage('Cannot connect to Java Server. Please check your network.');
       }
+    } finally {
       setLoading(false);
-      return;
     }
-
-    // 4. Default Fallback User Check
-    const isDefaultUser = (isEmailInput && input.toLowerCase() === 'hello@wallet.com') ||
-      (!isEmailInput && (input === '+84 123 456 789' || input === '123456789' || input.replace(/[\s-()]/g, '').endsWith('123456789')));
-
-    if (input === PHONE_LOCKED_VALUE || (isEmailInput && input.toLowerCase() === 'locked@wallet.com')) {
-      setFormMessage('Wallet is locked');
-      setPhoneError(' ');
-      setPasswordError(' ');
-    } else if (isDefaultUser || (!isEmailInput && /^[+]?\d[\d\s-]{7,}$/i.test(input))) {
-      // If matches default user, or if password matches fallback password 'wallet123'
-      if (password !== 'wallet123') {
-        setFormMessage('Incorrect password');
-        setPasswordError(' ');
-      } else {
-        login({
-          name: 'ANDO TADAO',
-          phone: isEmailInput ? '+84 123 456 789' : input,
-          email: isEmailInput ? input : 'hello@wallet.com',
-          role: 'user',
-          walletId: 'WL-8802-9901',
-          memberSince: 'JAN 2025',
-          walletStatus: 'ACTIVE'
-        });
-        setFormMessage('');
-        setPhone('');
-        setPassword('');
-        navigate('/dashboard');
-      }
-    } else {
-      setFormMessage(isEmailInput ? 'Email not found' : 'Phone number not found');
-      setPhoneError(' ');
-    }
-
-    setLoading(false);
   };
 
   return (

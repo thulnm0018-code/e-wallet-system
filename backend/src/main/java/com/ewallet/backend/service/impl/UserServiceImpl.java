@@ -7,6 +7,7 @@ import com.ewallet.backend.entity.Wallet;
 import com.ewallet.backend.exception.ResourceConflictException;
 import com.ewallet.backend.repository.UserRepository;
 import com.ewallet.backend.service.UserService;
+import com.ewallet.backend.util.PhoneUtils;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -31,7 +32,7 @@ public class UserServiceImpl implements UserService {
     public UserResponse registerUser(UserCreateRequest request) {
 
       String email = request.getEmail().trim().toLowerCase();
-      String phone = request.getPhone().trim();
+      String phone = PhoneUtils.normalize(request.getPhone());
 
         if (userRepository.existsByPhone(phone)) {
             throw new ResourceConflictException("Phone number already registered");
