@@ -7,6 +7,7 @@ import com.ewallet.backend.entity.User;
 import com.ewallet.backend.exception.UnauthorizedException;
 import com.ewallet.backend.repository.UserRepository;
 import com.ewallet.backend.service.AuthService;
+import com.ewallet.backend.security.JwtTokenProvider;
 import com.ewallet.backend.util.PhoneUtils;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -16,10 +17,14 @@ public class AuthServiceImpl implements AuthService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtTokenProvider jwtTokenProvider;
 
-    public AuthServiceImpl(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public AuthServiceImpl(UserRepository userRepository, 
+                           PasswordEncoder passwordEncoder, 
+                           JwtTokenProvider jwtTokenProvider) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.jwtTokenProvider = jwtTokenProvider;
     }
 
     @Override
@@ -35,7 +40,11 @@ public class AuthServiceImpl implements AuthService {
         } else {
            String cleanPhone = PhoneUtils.normalize(input);
 
-            if (cleanPhone.length() < 9 || cleanPhone.length() > 11) {
+           if (cleanPhone == null) {
+                throw new UnauthorizedException("Invalid credentials");
+            }
+
+            if (cleanPhone.length() < 10 || cleanPhone.length() > 15) {
                 throw new UnauthorizedException("Invalid credentials");
             }
 
@@ -53,8 +62,10 @@ public class AuthServiceImpl implements AuthService {
     private LoginResponse buildLoginResponse(User user) {
         UserResponse userResponse = UserResponse.fromEntity(user);
 
+        String accessToken = jwtTokenProvider.generateAccessToken(user);
+
         return LoginResponse.builder()
-                .accessToken("mock-access-token-jwt-secret-xyz")
+                .accessToken(accessToken)
                 .refreshToken("mock-refresh-token-jwt-secret-abc")
                 .tokenType("Bearer")
                 .expiresIn(3600)

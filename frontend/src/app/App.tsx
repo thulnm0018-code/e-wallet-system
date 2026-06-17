@@ -1,3 +1,5 @@
+/// <reference types="react" />
+import type { ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { WalletProvider } from './context/WalletContext';
 import { Navigation } from './components/Navigation';
@@ -52,11 +54,11 @@ export default function App() {
   );
 }
 
-function RequireAdmin({ children }: { children: JSX.Element }) {
+function RequireAdmin({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   if (!user || user.role !== 'admin') {
     return <Navigate to="/login" replace />;
   }
-  return children;
+  return <>{children}</>;
 }
 

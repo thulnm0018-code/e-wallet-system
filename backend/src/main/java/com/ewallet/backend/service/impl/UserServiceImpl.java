@@ -34,6 +34,10 @@ public class UserServiceImpl implements UserService {
       String email = request.getEmail().trim().toLowerCase();
       String phone = PhoneUtils.normalize(request.getPhone());
 
+      if (phone == null) {
+            throw new IllegalArgumentException("Invalid phone number format or unsupported country code");
+        }
+        
         if (userRepository.existsByPhone(phone)) {
             throw new ResourceConflictException("Phone number already registered");
         }

@@ -56,7 +56,6 @@ export function Register() {
     const trimmedPhone = phone.trim();
     const trimmedName = fullName.trim();
 
-
     if (!trimmedName) {
       setNameError(' ');
     }
@@ -83,6 +82,10 @@ export function Register() {
       return;
     }
 
+    if (trimmedEmail.toLowerCase() === EXISTING_EMAIL || trimmedPhone === EXISTING_PHONE) {
+      setFormWarning('Phone number or email already exists');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -95,34 +98,9 @@ export function Register() {
 
       navigate('/login');
     } catch (error: any) {
-      if (error.response && error.response.data) {
-        const serverResponse = error.response.data;
-
-        if (serverResponse.data && typeof serverResponse.data === 'object') {
-          const errorsMap = serverResponse.data;
-          
-          if (errorsMap.email) setEmailError(errorsMap.email);
-          if (errorsMap.phone) setPhoneError(errorsMap.phone);
-          if (errorsMap.name) setNameError(errorsMap.name);
-          if (errorsMap.password) setPasswordError(errorsMap.password);
-          
-          setFormWarning('Please correct the highlighted errors.');
-        } else if (serverResponse.message) {
-          const msg = serverResponse.message.toLowerCase();
-          
-          if (msg.includes('phone')) {
-            setPhoneError(serverResponse.message);
-          } else if (msg.includes('email')) {
-            setEmailError(serverResponse.message);
-          } else {
-            setFormWarning(serverResponse.message);
-          }
-        } else {
-          setFormWarning('Failed to create account. Please try again.');
-        }
-      } else {
-        setFormWarning('Cannot connect to Java Server. Please check your network.');
-      }
+      setFormWarning(
+        error.response?.data?.message || 'Failed to create account. Please try again.'
+      );
     } finally {
       setLoading(false);
     }
