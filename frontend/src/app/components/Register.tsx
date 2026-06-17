@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from './Button';
@@ -55,6 +56,7 @@ export function Register() {
     const trimmedPhone = phone.trim();
     const trimmedName = fullName.trim();
 
+
     if (!trimmedName) {
       setNameError(' ');
     }
@@ -81,32 +83,49 @@ export function Register() {
       return;
     }
 
-    if (trimmedEmail.toLowerCase() === EXISTING_EMAIL || trimmedPhone === EXISTING_PHONE) {
-      setFormWarning('Phone number or email already exists');
-      return;
-    }
 
     setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      await axios.post('http://localhost:8080/api/auth/register', {
+        name: trimmedName,
+        email: trimmedEmail,
+        phone: trimmedPhone,
+        password,
+      });
 
-    // Save user credentials dynamically in localStorage to support Login verification
-    const registeredUsers = JSON.parse(localStorage.getItem('registered_users') || '[]');
-    registeredUsers.push({
-      id: `WL-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`,
-      name: trimmedName,
-      fullName: trimmedName,
-      phone: trimmedPhone,
-      email: trimmedEmail,
-      password: password,
-      role: 'user',
-      balance: 10000.00,
-      walletStatus: 'ACTIVE',
-      memberSince: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-    });
-    localStorage.setItem('registered_users', JSON.stringify(registeredUsers));
+      navigate('/login');
+    } catch (error: any) {
+      if (error.response && error.response.data) {
+        const serverResponse = error.response.data;
 
-    setLoading(false);
-    navigate('/login');
+        if (serverResponse.data && typeof serverResponse.data === 'object') {
+          const errorsMap = serverResponse.data;
+          
+          if (errorsMap.email) setEmailError(errorsMap.email);
+          if (errorsMap.phone) setPhoneError(errorsMap.phone);
+          if (errorsMap.name) setNameError(errorsMap.name);
+          if (errorsMap.password) setPasswordError(errorsMap.password);
+          
+          setFormWarning('Please correct the highlighted errors.');
+        } else if (serverResponse.message) {
+          const msg = serverResponse.message.toLowerCase();
+          
+          if (msg.includes('phone')) {
+            setPhoneError(serverResponse.message);
+          } else if (msg.includes('email')) {
+            setEmailError(serverResponse.message);
+          } else {
+            setFormWarning(serverResponse.message);
+          }
+        } else {
+          setFormWarning('Failed to create account. Please try again.');
+        }
+      } else {
+        setFormWarning('Cannot connect to Java Server. Please check your network.');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
