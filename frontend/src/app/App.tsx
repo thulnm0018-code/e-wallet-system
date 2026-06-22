@@ -25,21 +25,92 @@ function AppContent() {
     <div className="min-h-screen bg-stone-white">
       {!hideNavbar && <Navigation />}
       <Routes>
-        <Route path="/" element={<Login />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/transactions" element={<Transactions />} />
-        <Route path="/send" element={<Send />} />
-        <Route path="/receive" element={<Receive />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/otp" element={<OTPVerification />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/profile" element={<Profile />} />
+        {/* Đường dẫn gốc / sẽ tự động điều hướng dựa theo Role của tài khoản */}
+        <Route path="/" element={<RootIndexRoute />} />
+        
+        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/transactions" element={<ProtectedRoute><Transactions /></ProtectedRoute>} />
+        <Route path="/send" element={<ProtectedRoute><Send /></ProtectedRoute>} />
+        <Route path="/receive" element={<ProtectedRoute><Receive /></ProtectedRoute>} />
+        
+        <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
+        <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />
+        <Route path="/otp" element={<GuestRoute><OTPVerification /></GuestRoute>} />
+        <Route path="/forgot-password" element={<GuestRoute><ForgotPassword /></GuestRoute>} />
+        <Route path="/reset-password" element={<GuestRoute><ResetPassword /></GuestRoute>} />
+        
+        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/admin" element={<RequireAdmin><AdminDashboard /></RequireAdmin>} />
       </Routes>
     </div>
   );
+}
+
+// Bộ điều hướng gốc thông minh tại đường dẫn "/"
+function RootIndexRoute() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading…</div>;
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return user.role === 'admin' 
+    ? <Navigate to="/admin" replace /> 
+    : <Navigate to="/dashboard" replace />;
+}
+
+function ProtectedRoute({ children }: { children: ReactNode }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading…</div>;
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Nếu là ADMIN nhưng cố tình vào các trang của USER (/dashboard, /send...) -> Đá ngược về /admin
+  if (user.role === 'admin') {
+    return <Navigate to="/admin" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function GuestRoute({ children }: { children: ReactNode }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading…</div>;
+  }
+
+  // Nếu đã đăng nhập rồi mà cố quay lại trang Login/Register -> Đá về đúng trang theo Role
+  if (user) {
+    return user.role === 'admin' 
+      ? <Navigate to="/admin" replace /> 
+      : <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function RequireAdmin({ children }: { children: ReactNode }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading…</div>;
+  }
+
+  if (!user || user.role !== 'admin') {
+    return <Navigate to="/login" replace />;
+  }
+  
+  return <>{children}</>;
 }
 
 export default function App() {
@@ -53,12 +124,3 @@ export default function App() {
     </AuthProvider>
   );
 }
-
-function RequireAdmin({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
-  if (!user || user.role !== 'admin') {
-    return <Navigate to="/login" replace />;
-  }
-  return <>{children}</>;
-}
-

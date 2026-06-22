@@ -1,11 +1,8 @@
-import axios from 'axios';
+import api from '../../api';
 import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Button } from './Button';
 import { Input } from './Input';
-
-const EXISTING_EMAIL = 'hello@wallet.com';
-const EXISTING_PHONE = '+84 123 456 789';
 
 function evaluateStrength(password: string) {
   let score = 0;
@@ -82,14 +79,9 @@ export function Register() {
       return;
     }
 
-    if (trimmedEmail.toLowerCase() === EXISTING_EMAIL || trimmedPhone === EXISTING_PHONE) {
-      setFormWarning('Phone number or email already exists');
-      return;
-    }
-
     setLoading(true);
     try {
-      await axios.post('http://localhost:8080/api/auth/register', {
+      await api.post('/auth/register', {
         name: trimmedName,
         email: trimmedEmail,
         phone: trimmedPhone,
@@ -98,9 +90,16 @@ export function Register() {
 
       navigate('/login');
     } catch (error: any) {
-      setFormWarning(
-        error.response?.data?.message || 'Failed to create account. Please try again.'
-      );
+      const errorResponse = error.response?.data;
+      if (errorResponse) {
+        if (errorResponse.message) {
+          setFormWarning(errorResponse.message);
+        } else {
+          setFormWarning('Registration failed. Please try again.');
+        }
+      } else {
+        setFormWarning('Cannot connect to server. Please check your network.');
+      }
     } finally {
       setLoading(false);
     }

@@ -1,114 +1,159 @@
-import axios from 'axios';
-import { useState } from 'react';
+import api from '../../api';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from './Button';
 import { Input } from './Input';
 import { useAuth } from '../context/AuthContext';
 
-const PHONE_LOCKED_VALUE = '0000000000';
-const ADMIN_PHONE = '9999999999';
-const ADMIN_PASSWORD = 'admin123';
+interface ApiResponse<T> {
+  message: string;
+  data: T;
+}
+
+interface UserData {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  role: string;
+  createdAt: string;
+}
+
+interface LoginData {
+  expiresIn: number;
+  user: UserData;
+}
 
 export function Login() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
   const [phoneError, setPhoneError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [formMessage, setFormMessage] = useState('');
+
   const navigate = useNavigate();
   const { login } = useAuth();
 
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const response = (await api.get('/auth/me')) as ApiResponse<UserData>;
+        const user = response.data;
+
+        if (!user) {
+          return;
+        }
+
+        login({
+          name: user.name,
+          phone: user.phone,
+          email: user.email,
+          role: user.role === 'ADMIN' ? 'admin' : 'user',
+          walletId: user.id.toString(),
+          accountType: 'STANDARD',
+          walletStatus: 'ACTIVE',
+          memberSince: user.createdAt
+        });
+
+        if (user.role === 'ADMIN') {
+          navigate('/admin', { replace: true });
+        } else {
+          navigate('/dashboard', { replace: true });
+        }
+      } catch {
+        // Chưa đăng nhập hoặc cookie hết hạn, giữ nguyên tại trang login
+      }
+    };
+
+    checkAuth();
+  }, [login, navigate]);
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (loading) return;
+
+    if (loading) {
+      return;
+    }
 
     setPhoneError('');
     setPasswordError('');
     setFormMessage('');
     setLoading(true);
 
-    const input = phone.trim();
-    const isEmailInput = input.includes('@');
+    const identifier = phone.trim();
+    const isEmail = identifier.includes('@');
 
-    if (isEmailInput) {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input)) {
-        setFormMessage('Invalid email format');
+    if (isEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(identifier)) {
         setPhoneError(' ');
+        setFormMessage('Invalid email format');
         setLoading(false);
         return;
       }
     } else {
-      if (!/^[+]?\d[\d\s-]{7,}$/i.test(input)) {
-        setFormMessage('Phone number not found');
+      const phoneRegex = /^[+]?\d[\d\s-]{7,}$/;
+      if (!phoneRegex.test(identifier)) {
         setPhoneError(' ');
+        setFormMessage('Invalid phone number');
         setLoading(false);
         return;
       }
     }
 
-    const isAdmin = (isEmailInput && input.toLowerCase() === 'admin@wallet.com' && password === ADMIN_PASSWORD) ||
-      (!isEmailInput && input === ADMIN_PHONE && password === ADMIN_PASSWORD);
-
-    if (isAdmin) {
-      login({
-        name: 'ADMIN',
-        phone: ADMIN_PHONE,
-        email: 'admin@wallet.com',
-        role: 'admin',
-        walletId: 'WL-ADMIN-ROOT',
-        memberSince: 'JAN 2025',
-        walletStatus: 'ACTIVE'
-      });
-      setFormMessage('');
-      setPhone('');
-      setPassword('');
-      navigate('/admin');
-      setLoading(false);
-      return;
-    }
-
     try {
-      const response = await axios.post('http://localhost:8080/api/auth/login', {
-        identifier: input,
-        password: password,
-      });
+      const response = (await api.post('/auth/login', {
+        identifier,
+        password
+      })) as ApiResponse<LoginData>;
 
-      const authData = response.data.data;
+      const authData = response.data;
 
-      localStorage.setItem('accessToken', authData.accessToken);
-      localStorage.setItem('refreshToken', authData.refreshToken);
+      if (!authData?.user) {
+        throw new Error('Invalid login response');
+      }
+
+      const user = authData.user;
 
       login({
-        name: authData.user.name,
-        phone: authData.user.phone,
-        email: authData.user.email,
-        role: 'user',
-        walletId: authData.user.id.toString(),
+        name: user.name,
+        phone: user.phone,
+        email: user.email,
+        role: user.role === 'ADMIN' ? 'admin' : 'user',
+        walletId: user.id.toString(),
         accountType: 'STANDARD',
         walletStatus: 'ACTIVE',
-        memberSince: authData.user.createdAt || 'JUN 2026'
+        memberSince: user.createdAt
       });
 
-      setFormMessage('');
       setPhone('');
       setPassword('');
-      navigate('/dashboard');
+      setFormMessage('');
+
+      if (user.role === 'ADMIN') {
+        navigate('/admin', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
+
     } catch (error: any) {
-      if (error.response && error.response.data) {
-        const serverResponse = error.response.data;
-        if (serverResponse.data && typeof serverResponse.data === 'object') {
-          const errorsMap = serverResponse.data;
+      const errorResponse = error.response?.data;
+
+      if (errorResponse) {
+        if (errorResponse.data && typeof errorResponse.data === 'object') {
+          const errorsMap = errorResponse.data;
           if (errorsMap.identifier) setPhoneError(errorsMap.identifier);
           if (errorsMap.password) setPasswordError(errorsMap.password);
           setFormMessage('Please correct the highlighted errors.');
-        } else if (serverResponse.message) {
-          setFormMessage(serverResponse.message);
+        } else if (errorResponse.message) {
+          setFormMessage(errorResponse.message);
         } else {
           setFormMessage('Login failed. Please try again.');
         }
       } else {
-        setFormMessage('Cannot connect to Java Server. Please check your network.');
+        setFormMessage('Cannot connect to server. Please check your network.');
       }
     } finally {
       setLoading(false);
@@ -119,8 +164,9 @@ export function Login() {
     <main className="min-h-screen overflow-hidden bg-[#e4e1dc] text-charcoal-black">
       <div className="relative flex justify-center px-6 py-20">
         <div
-          className={`w-full max-w-md border border-grid-line bg-stone-white/96 p-8 shadow-[0_24px_80px_rgba(0,0,0,0.08)] transition-opacity duration-200 ${loading ? 'opacity-80' : 'opacity-100'
-            }`}
+          className={`w-full max-w-md border border-grid-line bg-stone-white/96 p-8 shadow-[0_24px_80px_rgba(0,0,0,0.08)] transition-opacity duration-200 ${
+            loading ? 'opacity-80' : 'opacity-100'
+          }`}
         >
           <div className="mb-10 space-y-2">
             <div className="uppercase tracking-[0.35em] text-[11px] text-medium-concrete">Secure access</div>
