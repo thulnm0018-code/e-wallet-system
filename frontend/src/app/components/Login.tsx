@@ -1,9 +1,10 @@
 import api from '../../api';
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from './Button';
 import { Input } from './Input';
 import { useAuth } from '../context/AuthContext';
+import { OTPModal } from './OTPModal';
 
 interface ApiResponse<T> {
   message: string;
@@ -34,7 +35,16 @@ export function Login() {
   const [formMessage, setFormMessage] = useState('');
 
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
+  const [isOtpOpen, setIsOtpOpen] = useState(false);
+  const [pendingIdentifier, setPendingIdentifier] = useState('');
+
+  useEffect(() => {
+    if (location.state?.message) {
+      setFormMessage(location.state.message);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -149,6 +159,10 @@ export function Login() {
           setFormMessage('Please correct the highlighted errors.');
         } else if (errorResponse.message) {
           setFormMessage(errorResponse.message);
+          if (errorResponse.message.toLowerCase().includes('otp') || errorResponse.message.toLowerCase().includes('activated')) {
+            setPendingIdentifier(identifier);
+            setIsOtpOpen(true);
+          }
         } else {
           setFormMessage('Login failed. Please try again.');
         }
@@ -162,7 +176,7 @@ export function Login() {
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#e4e1dc] text-charcoal-black">
-      <div className="relative flex justify-center px-6 py-20">
+      <div className={`relative flex justify-center px-6 py-20 transition-all duration-300 ${isOtpOpen ? 'blur-sm select-none pointer-events-none' : ''}`}>
         <div
           className={`w-full max-w-md border border-grid-line bg-stone-white/96 p-8 shadow-[0_24px_80px_rgba(0,0,0,0.08)] transition-opacity duration-200 ${
             loading ? 'opacity-80' : 'opacity-100'
@@ -235,6 +249,19 @@ export function Login() {
           </div>
         </div>
       </div>
+      {isOtpOpen && (
+        <OTPModal
+          isOpen={isOtpOpen}
+          identifier={pendingIdentifier}
+          onSuccess={() => {
+            setIsOtpOpen(false);
+            setFormMessage('Xác thực tài khoản thành công! Vui lòng đăng nhập.');
+          }}
+          onClose={() => {
+            setIsOtpOpen(false);
+          }}
+        />
+      )}
     </main>
   );
 }

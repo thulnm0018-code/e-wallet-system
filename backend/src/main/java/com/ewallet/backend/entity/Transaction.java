@@ -1,45 +1,60 @@
 package com.ewallet.backend.entity;
 
-import com.ewallet.backend.enums.WalletStatus;
+import com.ewallet.backend.enums.TransactionStatus;
+import com.ewallet.backend.enums.TransactionType;
 import jakarta.persistence.*;
+
 import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "wallets")
+@Table(name = "transactions")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Wallet {
+public class Transaction {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(
-            name = "user_id",
+    @Column(
+            name = "transaction_code",
             nullable = false,
-            unique = true
+            unique = true,
+            length = 100
     )
-    private User user;
+    private String transactionCode;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "sender_wallet_id")
+    private Wallet senderWallet;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "receiver_wallet_id")
+    private Wallet receiverWallet;
 
     @Column(
             nullable = false,
-            precision = 19,
+            precision = 15,
             scale = 2
     )
-    @Builder.Default
-    private BigDecimal balance = BigDecimal.ZERO.setScale(2);
+    private BigDecimal amount;
+
+    @Column(length = 255)
+    private String message;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "wallet_status", nullable = false)
-    @Builder.Default
-    private WalletStatus walletStatus = WalletStatus.ACTIVE;
+    @Column(nullable = false)
+    private TransactionStatus status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private TransactionType type;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

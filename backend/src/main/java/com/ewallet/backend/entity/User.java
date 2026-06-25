@@ -2,7 +2,7 @@ package com.ewallet.backend.entity;
 
 import java.time.LocalDateTime;
 import jakarta.persistence.*;
-
+import com.ewallet.backend.enums.UserStatus;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -38,15 +38,12 @@ public class User {
     @Column(nullable = false)
     private Role role = Role.USER;
 
-
-    public enum UserStatus {
-        ACTIVE, LOCKED, BANNED
-    }
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private UserStatus userStatus = UserStatus.ACTIVE;
-
     
+    @Enumerated(EnumType.STRING)
+    @Column(name = "user_status", nullable = false, length = 50)
+    private UserStatus userStatus = UserStatus.PENDING_VERIFICATION;
+
+
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL)
     private Wallet wallet;
 

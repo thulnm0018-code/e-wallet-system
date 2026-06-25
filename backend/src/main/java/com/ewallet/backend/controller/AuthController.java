@@ -1,27 +1,56 @@
 package com.ewallet.backend.controller;
 
+import com.ewallet.backend.dto.request.UserCreateRequest;
 import com.ewallet.backend.dto.request.UserLoginRequest;
+import com.ewallet.backend.dto.request.VerifyOtpRequest;
 import com.ewallet.backend.dto.response.ApiResponse;
 import com.ewallet.backend.dto.response.LoginResponse;
 import com.ewallet.backend.dto.response.UserResponse;
 import com.ewallet.backend.service.AuthService;
+import com.ewallet.backend.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/v1/auth")
 public class AuthController {
 
     private final AuthService authService;
+    private final UserService userService;
     
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, UserService userService) {
         this.authService = authService;
+        this.userService = userService;
     }
 
+    @PostMapping("/register")
+    public ResponseEntity<ApiResponse<UserResponse>> register(@Valid @RequestBody UserCreateRequest request) {
+        UserResponse userResponse = userService.registerUser(request);
+        return new ResponseEntity<>(
+                ApiResponse.<UserResponse>builder()
+                        .message("Registration successful. Please verify OTP.")
+                        .data(userResponse)
+                        .build(),
+                HttpStatus.CREATED
+        );
+    }
+
+    @PostMapping("/verify-otp")
+    public ResponseEntity<ApiResponse<?>> verifyOtp(@Valid @RequestBody VerifyOtpRequest request) {
+        authService.verifyOtp(request.getIdentifier(), request.getOtpCode());
+        return ResponseEntity.ok(
+                ApiResponse.builder()
+                        .message("Account activated and e-wallet created successfully!")
+                        .data(null)
+                        .build()
+        );
+    }
 
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<LoginResponse>> login(@Valid @RequestBody UserLoginRequest request, HttpServletResponse response) {

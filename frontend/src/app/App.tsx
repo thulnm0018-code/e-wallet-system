@@ -9,7 +9,6 @@ import { Send } from './components/Send';
 import { Receive } from './components/Receive';
 import { Login } from './components/Login';
 import { Register } from './components/Register';
-import { OTPVerification } from './components/OTPVerification';
 import { ForgotPassword } from './components/ForgotPassword';
 import { ResetPassword } from './components/ResetPassword';
 import { Profile } from './components/Profile';
@@ -18,7 +17,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 
 function AppContent() {
   const location = useLocation();
-  const isAuthPage = location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/otp' || location.pathname === '/forgot-password' || location.pathname === '/reset-password';
+  const isAuthPage = location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/forgot-password' || location.pathname === '/reset-password';
   const hideNavbar = isAuthPage || location.pathname === '/admin';
 
   return (
@@ -35,7 +34,6 @@ function AppContent() {
         
         <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
         <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />
-        <Route path="/otp" element={<GuestRoute><OTPVerification /></GuestRoute>} />
         <Route path="/forgot-password" element={<GuestRoute><ForgotPassword /></GuestRoute>} />
         <Route path="/reset-password" element={<GuestRoute><ResetPassword /></GuestRoute>} />
         

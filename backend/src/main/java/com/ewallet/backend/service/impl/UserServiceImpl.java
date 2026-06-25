@@ -2,29 +2,35 @@ package com.ewallet.backend.service.impl;
 
 import com.ewallet.backend.dto.request.UserCreateRequest;
 import com.ewallet.backend.dto.response.UserResponse;
+import com.ewallet.backend.entity.Otp;
 import com.ewallet.backend.entity.User;
-import com.ewallet.backend.entity.Wallet;
+import com.ewallet.backend.enums.UserStatus;
 import com.ewallet.backend.exception.ResourceConflictException;
+import com.ewallet.backend.repository.OtpRepository;
 import com.ewallet.backend.repository.UserRepository;
 import com.ewallet.backend.service.UserService;
 import com.ewallet.backend.util.PhoneUtils;
+import com.ewallet.backend.util.OtpUtils;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import jakarta.transaction.Transactional;
-import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Service
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final OtpRepository otpRepository;
 
     public UserServiceImpl(UserRepository userRepository,
-                           PasswordEncoder passwordEncoder) {
+                           PasswordEncoder passwordEncoder,
+                           OtpRepository otpRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.otpRepository = otpRepository;
     }
 
     @Override
@@ -53,16 +59,25 @@ public class UserServiceImpl implements UserService {
         user.setPhone(phone);
         user.setPasswordHash(hash);
         user.setRole(User.Role.USER);
-        user.setUserStatus(User.UserStatus.ACTIVE);
-
-        Wallet wallet = new Wallet();
-        wallet.setUser(user);
-        wallet.setBalance(BigDecimal.ZERO);
-        wallet.setWalletStatus(Wallet.WalletStatus.ACTIVE);
-        user.setWallet(wallet);
-
+       user.setUserStatus(UserStatus.PENDING_VERIFICATION);
+      
         User savedUser = userRepository.save(user);
+
+        String otpCode = OtpUtils.generateOtp();
+
+        Otp otp = Otp.builder()
+        .user(savedUser)
+        .otpCode(otpCode)
+        .verified(false)
+        .expiredAt(LocalDateTime.now().plusMinutes(5))
+        .build();
+
+        otpRepository.save(otp);
+
+       System.out.println("==========================================");
+        System.out.println("MA OTP KiCH HOAT TAI KHOAN CHO [" + phone + "]: " + otpCode);
+        System.out.println("==========================================");
         
-       return UserResponse.fromEntity(savedUser);
+        return UserResponse.fromEntity(savedUser);
     }
 }

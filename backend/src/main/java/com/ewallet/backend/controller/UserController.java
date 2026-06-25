@@ -1,33 +1,10 @@
 package com.ewallet.backend.controller;
 
-import com.ewallet.backend.dto.request.UserCreateRequest;
-import com.ewallet.backend.dto.response.UserResponse;
-import com.ewallet.backend.dto.response.ApiResponse;
-import com.ewallet.backend.service.UserService;
-import jakarta.validation.Valid;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/users")
 public class UserController {
 
-    private final UserService userService;
-
-    public UserController(UserService userService) {
-        this.userService = userService;
-    }
-
-    @PostMapping("/register")
-   public ResponseEntity<ApiResponse<UserResponse>> registerUser(@Valid @RequestBody UserCreateRequest request) {
-        UserResponse userResponse = userService.registerUser(request);
-        
-        ApiResponse<UserResponse> response = ApiResponse.<UserResponse>builder()
-                .message("User registered successfully")
-                .data(userResponse)
-                .build();
-       
-                return ResponseEntity.ok(response);
-    }
 }

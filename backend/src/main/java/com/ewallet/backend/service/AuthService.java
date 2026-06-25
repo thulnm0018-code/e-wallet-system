@@ -12,4 +12,5 @@ public interface AuthService {
     UserResponse getCurrentUser();
 
     void logout(HttpServletRequest request, HttpServletResponse response); 
+    void verifyOtp(String phoneOrEmail, String otpCode);
 }

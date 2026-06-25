@@ -3,11 +3,17 @@ package com.ewallet.backend.service.impl;
 import com.ewallet.backend.dto.request.UserLoginRequest;
 import com.ewallet.backend.dto.response.LoginResponse;
 import com.ewallet.backend.dto.response.UserResponse;
+import com.ewallet.backend.entity.Otp;
 import com.ewallet.backend.entity.RefreshToken;
 import com.ewallet.backend.entity.User;
+import com.ewallet.backend.entity.Wallet;
+import com.ewallet.backend.enums.UserStatus;
+import com.ewallet.backend.enums.WalletStatus;
 import com.ewallet.backend.exception.UnauthorizedException;
 import com.ewallet.backend.repository.UserRepository;
 import com.ewallet.backend.repository.RefreshTokenRepository;
+import com.ewallet.backend.repository.WalletRepository;
+import com.ewallet.backend.repository.OtpRepository;
 import com.ewallet.backend.service.AuthService;
 import com.ewallet.backend.security.JwtTokenProvider;
 import com.ewallet.backend.util.CookieUtils;
@@ -19,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import org.springframework.security.core.Authentication;
@@ -31,15 +38,21 @@ public class AuthServiceImpl implements AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final WalletRepository walletRepository;
+    private final OtpRepository otpRepository;
 
     public AuthServiceImpl(UserRepository userRepository, 
-                            RefreshTokenRepository refreshTokenRepository,
+                           RefreshTokenRepository refreshTokenRepository,
                            PasswordEncoder passwordEncoder, 
-                           JwtTokenProvider jwtTokenProvider) {
+                           JwtTokenProvider jwtTokenProvider,
+                           WalletRepository walletRepository,
+                           OtpRepository otpRepository) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.walletRepository = walletRepository;
+        this.otpRepository = otpRepository;
     }
 
     @Override
@@ -62,6 +75,10 @@ public class AuthServiceImpl implements AuthService {
 
             user = userRepository.findByPhone(cleanPhone)
                     .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
+        }
+        // Check if user is pending verification
+        if (user.getUserStatus() == UserStatus.PENDING_VERIFICATION) {
+            throw new UnauthorizedException("Account is not activated. Please verify your OTP.");
         }
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
@@ -198,4 +215,68 @@ public class AuthServiceImpl implements AuthService {
         }
         return null;
     }
+
+@Override
+@Transactional
+public void verifyOtp(String phoneOrEmail, String otpCode) {
+
+    String input = phoneOrEmail.trim();
+    boolean isEmail = input.matches("^[A-Za-z0-9+_.-]+@(.+)$");
+    String normalizedIdentifier = input;
+    if (isEmail) {
+        normalizedIdentifier = input.toLowerCase();
+    } else {
+        String cleanPhone = PhoneUtils.normalize(input);
+        if (cleanPhone != null) {
+            normalizedIdentifier = cleanPhone;
+        }
+    }
+
+    Otp otp = otpRepository
+            .findTopByUser_EmailOrUser_PhoneOrderByCreatedAtDesc(
+                    normalizedIdentifier,
+                    normalizedIdentifier)
+            .orElseThrow(
+                    () -> new RuntimeException(
+                            "OTP does not exist"));
+
+    if (otp.isVerified()) {
+        throw new RuntimeException(
+                "OTP already used");
+    }
+
+    if (!otp.getOtpCode().equals(otpCode)) {
+        throw new RuntimeException(
+                "Invalid OTP");
+    }
+
+    if (otp.getExpiredAt()
+            .isBefore(LocalDateTime.now())) {
+        throw new RuntimeException(
+                "OTP expired");
+    }
+
+    User user = otp.getUser();
+
+    user.setUserStatus(UserStatus.ACTIVE);
+
+    userRepository.save(user);
+
+    if (user.getWallet() == null) {
+
+        Wallet wallet = Wallet.builder()
+                .user(user)
+                .balance(BigDecimal.ZERO)
+                .walletStatus(WalletStatus.ACTIVE)
+                .build();
+
+        walletRepository.save(wallet);
+
+        user.setWallet(wallet);
+    }
+
+    otp.setVerified(true);
+
+    otpRepository.save(otp);
+}
 }

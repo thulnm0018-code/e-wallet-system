@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from './Button';
 import { Input } from './Input';
+import { OTPModal } from './OTPModal';
 
 function evaluateStrength(password: string) {
   let score = 0;
@@ -32,6 +33,8 @@ export function Register() {
   const [passwordError, setPasswordError] = useState('');
   const [confirmError, setConfirmError] = useState('');
   const [formWarning, setFormWarning] = useState('');
+  const [isOtpOpen, setIsOtpOpen] = useState(false);
+  const [registeredIdentifier, setRegisteredIdentifier] = useState('');
 
   const strength = useMemo(() => evaluateStrength(password), [password]);
 
@@ -88,7 +91,8 @@ export function Register() {
         password,
       });
 
-      navigate('/login');
+      setRegisteredIdentifier(trimmedPhone || trimmedEmail);
+      setIsOtpOpen(true);
     } catch (error: any) {
       const errorResponse = error.response?.data;
       if (errorResponse) {
@@ -109,7 +113,7 @@ export function Register() {
     <main className="min-h-screen overflow-hidden bg-[#e4e1dc] text-charcoal-black">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.18),transparent_16%),radial-gradient(circle_at_bottom_right,rgba(0,0,0,0.08),transparent_20%),linear-gradient(140deg,#ebe8e1,#d9d6cf)]" />
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.12),transparent_36%,rgba(0,0,0,0.05))]" />
-      <div className="relative flex min-h-screen items-center justify-center px-6 py-20">
+      <div className={`relative flex min-h-screen items-center justify-center px-6 py-20 transition-all duration-300 ${isOtpOpen ? 'blur-sm select-none pointer-events-none' : ''}`}>
         <div
           className={`w-full max-w-md border border-grid-line bg-stone-white/96 p-8 shadow-[0_28px_90px_rgba(0,0,0,0.08)] transition-opacity duration-200 ${
             loading ? 'opacity-80' : 'opacity-100'
@@ -193,6 +197,20 @@ export function Register() {
           </form>
         </div>
       </div>
+      {isOtpOpen && (
+        <OTPModal
+          isOpen={isOtpOpen}
+          identifier={registeredIdentifier}
+          onSuccess={() => {
+            setIsOtpOpen(false);
+            navigate('/login', { state: { message: 'Đăng ký và kích hoạt tài khoản thành công! Vui lòng đăng nhập.' } });
+          }}
+          onClose={() => {
+            setIsOtpOpen(false);
+            navigate('/login', { state: { message: 'Tài khoản của bạn đã được đăng ký nhưng chưa kích hoạt. Vui lòng đăng nhập để xác thực OTP.' } });
+          }}
+        />
+      )}
     </main>
   );
 }

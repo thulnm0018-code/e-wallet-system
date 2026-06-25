@@ -45,14 +45,10 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers(
-                    "/api/auth/login",
-                    "/api/auth/register",
-                    "/api/auth/refresh",
-                    "/api/auth/logout"
-                ).permitAll()
-                .anyRequest().authenticated()
-            )
+            // Cho phép TẤT CẢ các API bắt đầu bằng /api/v1/auth/ đi qua tự do không cần Token
+            .requestMatchers("/api/v1/auth/**").permitAll() 
+            .anyRequest().authenticated()
+)
             .formLogin(form -> form.disable());
         
             http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
