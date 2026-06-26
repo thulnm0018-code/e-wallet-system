@@ -10,7 +10,27 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "transactions")
+@Table(
+    name = "transactions",
+    indexes = {
+        @Index(
+            name = "idx_transaction_code",
+            columnList = "transaction_code"
+        ),
+        @Index(
+            name = "idx_sender_wallet",
+            columnList = "sender_wallet_id"
+        ),
+        @Index(
+            name = "idx_receiver_wallet",
+            columnList = "receiver_wallet_id"
+        ),
+        @Index(
+            name = "idx_created_at",
+            columnList = "created_at"
+        )
+    }
+)
 @Getter
 @Setter
 @NoArgsConstructor

@@ -8,7 +8,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "wallets")
+@Table(
+    name = "wallets")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -47,6 +48,10 @@ public class Wallet {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Version
+    @Column(nullable = false)
+    private Long version;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -57,4 +62,5 @@ public class Wallet {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
+
 }
