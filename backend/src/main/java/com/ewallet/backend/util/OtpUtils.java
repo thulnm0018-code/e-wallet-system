@@ -1,10 +1,10 @@
 package com.ewallet.backend.util;
 
-import java.util.Random;
+import java.security.SecureRandom;
 
 public class OtpUtils {
 
-    private static final Random RANDOM = new Random();
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     public static String generateOtp() {
         return String.format("%06d",

@@ -1,5 +1,7 @@
 package com.ewallet.backend.service.impl;
 
+import org.springframework.dao.PessimisticLockingFailureException;
+import com.ewallet.backend.exception.ResourceConflictException;
 import com.ewallet.backend.dto.request.TransferRequest;
 import com.ewallet.backend.dto.response.TransactionResponse;
 import com.ewallet.backend.entity.Transaction;
@@ -9,16 +11,18 @@ import com.ewallet.backend.enums.TransactionType;
 import com.ewallet.backend.enums.WalletStatus;
 import com.ewallet.backend.repository.TransactionRepository;
 import com.ewallet.backend.repository.WalletRepository;
+import com.ewallet.backend.security.CurrentUserService;
 import com.ewallet.backend.service.WalletService;
 import com.ewallet.backend.util.PhoneUtils;
-
-import org.springframework.security.core.context.SecurityContextHolder;
+import com.ewallet.backend.util.TransactionCodeGenerator;
+import com.ewallet.backend.exception.NotFoundException;
+import com.ewallet.backend.exception.BadRequestException;
+import com.ewallet.backend.mapper.TransactionMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -26,46 +30,74 @@ public class WalletServiceImpl implements WalletService {
 
     private final WalletRepository walletRepository;
     private final TransactionRepository transactionRepository;
+    private final TransactionCodeGenerator codeGenerator;
+    private final CurrentUserService currentUserService;
+    private final TransactionMapper transactionMapper;
 
     public WalletServiceImpl(
             WalletRepository walletRepository,
-            TransactionRepository transactionRepository) {
+            TransactionRepository transactionRepository,
+            TransactionCodeGenerator codeGenerator,
+            CurrentUserService currentUserService,
+            TransactionMapper transactionMapper) {
+
         this.walletRepository = walletRepository;
         this.transactionRepository = transactionRepository;
+        this.codeGenerator = codeGenerator;
+        this.currentUserService = currentUserService;
+        this.transactionMapper = transactionMapper;
     }
 
     @Override
     @Transactional
     public TransactionResponse transferMoney(TransferRequest request) {
-        Long senderUserId = getCurrentUserId();
+        Long senderUserId = currentUserService.getCurrentUserId();
+
+            if (request.getAmount() == null || request.getAmount().signum() <= 0) {
+            throw new BadRequestException("Amount must be greater than zero");
+        }
 
         String receiverPhone = PhoneUtils.normalize(request.getReceiverPhone());
         if (receiverPhone == null) {
-            throw new RuntimeException("Invalid receiver phone number");
+            throw new BadRequestException("Invalid receiver phone number");
         }
 
         Wallet senderWalletTemp = walletRepository
                 .findByUser_Id(senderUserId)
-                .orElseThrow(() -> new RuntimeException("Sender wallet not found"));
+                .orElseThrow(() -> new NotFoundException("Sender wallet not found"));
 
         Wallet receiverWalletTemp = walletRepository
                 .findByUser_Phone(receiverPhone)
-                .orElseThrow(() -> new RuntimeException("Receiver wallet not found"));
+                .orElseThrow(() -> new NotFoundException("Receiver wallet not found"));
 
         if (senderWalletTemp.getId().equals(receiverWalletTemp.getId())) {
-            throw new RuntimeException("Cannot transfer money to yourself");
+            throw new BadRequestException("Cannot transfer money to yourself");
         }
 
         Long firstWalletId = Math.min(senderWalletTemp.getId(), receiverWalletTemp.getId());
         Long secondWalletId = Math.max(senderWalletTemp.getId(), receiverWalletTemp.getId());
 
-        Wallet firstLockedWallet = walletRepository
-                .findByIdForUpdate(firstWalletId)
-                .orElseThrow(() -> new RuntimeException("Could not acquire wallet lock"));
+        Wallet firstLockedWallet;
+        Wallet secondLockedWallet;
 
-        Wallet secondLockedWallet = walletRepository
-                .findByIdForUpdate(secondWalletId)
-                .orElseThrow(() -> new RuntimeException("Could not acquire wallet lock"));
+        try {
+            firstLockedWallet = walletRepository
+                    .findByIdForUpdate(firstWalletId)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Wallet not found during lock acquisition"
+                    ));
+
+            secondLockedWallet = walletRepository
+                    .findByIdForUpdate(secondWalletId)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Wallet not found during lock acquisition"
+                    ));
+
+        } catch (PessimisticLockingFailureException ex) {
+            throw new ResourceConflictException(
+                    "Wallet is currently being processed. Please try again later."
+            );
+        }
 
         Wallet senderWallet = firstLockedWallet.getId().equals(senderWalletTemp.getId()) 
                 ? firstLockedWallet 
@@ -76,19 +108,15 @@ public class WalletServiceImpl implements WalletService {
                 : secondLockedWallet;
 
         if (senderWallet.getWalletStatus() != WalletStatus.ACTIVE) {
-            throw new RuntimeException("Sender wallet is inactive");
+            throw new BadRequestException("Sender wallet is inactive");
         }
 
         if (receiverWallet.getWalletStatus() != WalletStatus.ACTIVE) {
-            throw new RuntimeException("Receiver wallet is inactive");
-        }
-
-        if (request.getAmount() == null || request.getAmount().signum() <= 0) {
-            throw new RuntimeException("Amount must be greater than zero");
+            throw new BadRequestException("Receiver wallet is inactive");
         }
 
         if (senderWallet.getBalance().compareTo(request.getAmount()) < 0) {
-            throw new RuntimeException("Insufficient balance");
+            throw new BadRequestException("Insufficient balance");
         }
 
         senderWallet.setBalance(senderWallet.getBalance().subtract(request.getAmount()));
@@ -97,7 +125,8 @@ public class WalletServiceImpl implements WalletService {
         walletRepository.saveAll(List.of(senderWallet, receiverWallet));
 
         Transaction transaction = Transaction.builder()
-                .transactionCode(generateTransactionCode())
+                
+                .transactionCode(codeGenerator.generate())
                 .senderWallet(senderWallet)
                 .receiverWallet(receiverWallet)
                 .amount(request.getAmount())
@@ -109,67 +138,36 @@ public class WalletServiceImpl implements WalletService {
                 .build();
 
         Transaction savedTransaction = transactionRepository.save(transaction);
-        return mapToResponse(savedTransaction);
+        return transactionMapper.toResponse(savedTransaction);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<TransactionResponse> getMyHistory() {
-        Long userId = getCurrentUserId();
+       Long userId = currentUserService.getCurrentUserId();
 
         Wallet wallet = walletRepository
                 .findByUser_Id(userId)
-                .orElseThrow(() -> new RuntimeException("Wallet not found"));
+                .orElseThrow(() -> new NotFoundException("Wallet not found"));
 
         return transactionRepository
                 .findWalletTransactions(wallet.getId())
                 .stream()
-                .map(this::mapToResponse)
+                .map(transactionMapper::toResponse)
                 .collect(Collectors.toList());
     }
 
     @Override
     @Transactional(readOnly = true)
     public BigDecimal getMyBalance() {
-        Long userId = getCurrentUserId();
+        Long userId = currentUserService.getCurrentUserId();
 
         Wallet wallet = walletRepository
                 .findByUser_Id(userId)
-                .orElseThrow(() -> new RuntimeException("Wallet not found"));
+                .orElseThrow(() -> new NotFoundException("Wallet not found"));
 
         return wallet.getBalance();
     }
 
-    private Long getCurrentUserId() {
-        Object principal = SecurityContextHolder
-                .getContext()
-                .getAuthentication()
-                .getPrincipal();
-        return Long.parseLong(principal.toString());
-    }
-
-    private String generateTransactionCode() {
-        return "TX" + System.currentTimeMillis() + UUID.randomUUID()
-                .toString()
-                .substring(0, 8)
-                .toUpperCase();
-    }
-
-    private TransactionResponse mapToResponse(Transaction tx) {
-        return TransactionResponse.builder()
-                .id(tx.getId())
-                .transactionCode(tx.getTransactionCode())
-                .senderPhone(tx.getSenderWallet() != null 
-                        ? tx.getSenderWallet().getUser().getPhone() 
-                        : "SYSTEM")
-                .receiverPhone(tx.getReceiverWallet() != null 
-                        ? tx.getReceiverWallet().getUser().getPhone() 
-                        : "SYSTEM")
-                .amount(tx.getAmount())
-                .message(tx.getMessage())
-                .status(tx.getStatus())
-                .type(tx.getType())
-                .createdAt(tx.getCreatedAt())
-                .build();
-    }
+ 
 }
