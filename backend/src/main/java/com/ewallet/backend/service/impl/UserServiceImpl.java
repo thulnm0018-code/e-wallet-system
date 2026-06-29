@@ -2,16 +2,22 @@ package com.ewallet.backend.service.impl;
 
 import com.ewallet.backend.dto.request.UserCreateRequest;
 import com.ewallet.backend.dto.response.UserResponse;
+import com.ewallet.backend.dto.response.ReceiverLookupResponse;
 import com.ewallet.backend.entity.Otp;
 import com.ewallet.backend.entity.User;
+import com.ewallet.backend.entity.Wallet;
 import com.ewallet.backend.enums.UserStatus;
 import com.ewallet.backend.exception.ResourceConflictException;
 import com.ewallet.backend.repository.OtpRepository;
 import com.ewallet.backend.repository.UserRepository;
+import com.ewallet.backend.repository.WalletRepository;
 import com.ewallet.backend.service.UserService;
 import com.ewallet.backend.util.PhoneUtils;
 import com.ewallet.backend.util.OtpUtils;
+import com.ewallet.backend.exception.NotFoundException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -24,13 +30,18 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final OtpRepository otpRepository;
+    private final WalletRepository walletRepository;
+
+    private static final Logger log = LoggerFactory.getLogger(UserServiceImpl.class);
 
     public UserServiceImpl(UserRepository userRepository,
                            PasswordEncoder passwordEncoder,
-                           OtpRepository otpRepository) {
+                           OtpRepository otpRepository,
+                           WalletRepository walletRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.otpRepository = otpRepository;
+        this.walletRepository = walletRepository;
     }
 
     @Override
@@ -74,10 +85,29 @@ public class UserServiceImpl implements UserService {
 
         otpRepository.save(otp);
 
-       System.out.println("==========================================");
-        System.out.println("MA OTP KiCH HOAT TAI KHOAN CHO [" + phone + "]: " + otpCode);
-        System.out.println("==========================================");
+       log.info("==========================================");
+        log.info("MA OTP KiCH HOAT TAI KHOAN CHO [{}]: {}", phone, otpCode);
+        log.info("==========================================");
         
         return UserResponse.fromEntity(savedUser);
+    }
+
+    @Override
+    public ReceiverLookupResponse getUserByPhone(String phone) {
+        String cleanPhone = PhoneUtils.normalize(phone);
+        if (cleanPhone == null) {
+            throw new IllegalArgumentException("Invalid phone number format");
+        }
+        User user = userRepository.findByPhone(cleanPhone)
+                .orElseThrow(() -> new NotFoundException("User not found with phone: " + phone));
+
+        Wallet wallet = walletRepository.findByUser_Id(user.getId())
+                .orElseThrow(() -> new NotFoundException("Wallet not found for user: " + user.getId()));
+
+        return ReceiverLookupResponse.builder()
+                .name(user.getName())
+                .walletId(wallet.getId())
+                .walletStatus(wallet.getWalletStatus())
+                .build();
     }
 }

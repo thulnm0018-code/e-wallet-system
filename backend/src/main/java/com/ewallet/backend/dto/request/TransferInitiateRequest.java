@@ -13,7 +13,7 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class TransferRequest {
+public class TransferInitiateRequest {
     @NotBlank(message = "Receiver phone number is required")
     private String receiverPhone;
 
@@ -26,7 +26,4 @@ public class TransferRequest {
     message = "Message cannot exceed 255 characters"
     )
     private String message;
-
-    @Size(min = 6, max = 6, message = "OTP must be exactly 6 digits")
-    private String otpCode;
 }

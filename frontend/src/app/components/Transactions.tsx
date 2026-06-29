@@ -433,7 +433,7 @@ export function Transactions() {
           <div className="fixed right-0 top-0 bottom-0 w-full md:w-[480px] bg-stone-white border-l border-grid-line z-50 p-10 flex flex-col justify-between shadow-none transition-transform duration-150 ease-out transform translate-x-0 animate-slide-in">
             
             {/* Top Bar inside Drawer */}
-            <div className="space-y-8">
+            <div className="space-y-8 flex-1 overflow-y-auto pr-2">
               <div className="flex justify-between items-center border-b border-grid-line pb-6">
                 <div>
                   <div className="text-[10px] uppercase tracking-[0.25em] text-medium-concrete font-medium">ARCHIVAL DOCUMENT</div>
@@ -472,14 +472,14 @@ export function Transactions() {
                   <div className="space-y-1">
                     <div className="text-[10px] text-medium-concrete uppercase tracking-wider font-bold">SENDER</div>
                     <div className="text-[12px] font-bold text-charcoal-black uppercase truncate">
-                      {selectedTransaction.type === 'receive' ? selectedTransaction.sender : 'YOU (ANDO TADAO)'}
+                      {selectedTransaction.sender || 'YOU'}
                     </div>
                   </div>
                   <ArrowRight className="w-4 h-4 text-medium-concrete" />
                   <div className="space-y-1">
                     <div className="text-[10px] text-medium-concrete uppercase tracking-wider font-bold">RECIPIENT</div>
                     <div className="text-[12px] font-bold text-charcoal-black uppercase truncate">
-                      {selectedTransaction.type === 'send' ? selectedTransaction.recipient : 'YOU (ANDO TADAO)'}
+                      {selectedTransaction.recipient || 'YOU'}
                     </div>
                   </div>
                 </div>
@@ -586,11 +586,11 @@ export function Transactions() {
                   </tr>
                   <tr className="border-b border-dashed border-charcoal-black/30">
                     <td className="py-2.5 font-bold uppercase">SENDER:</td>
-                    <td className="py-2.5 text-right uppercase">{selectedTransaction.type === 'receive' ? selectedTransaction.sender : 'YOU (ANDO TADAO)'}</td>
+                    <td className="py-2.5 text-right uppercase">{selectedTransaction.sender || 'YOU'}</td>
                   </tr>
                   <tr className="border-b border-dashed border-charcoal-black/30">
                     <td className="py-2.5 font-bold uppercase">RECIPIENT:</td>
-                    <td className="py-2.5 text-right uppercase">{selectedTransaction.type === 'send' ? selectedTransaction.recipient : 'YOU (ANDO TADAO)'}</td>
+                    <td className="py-2.5 text-right uppercase">{selectedTransaction.recipient || 'YOU'}</td>
                   </tr>
                   <tr className="border-b border-dashed border-charcoal-black/30">
                     <td className="py-2.5 font-bold uppercase">MEMO:</td>

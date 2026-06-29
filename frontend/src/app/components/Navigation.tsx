@@ -26,13 +26,11 @@ export function Navigation() {
 
           </div>
           
-          {/* Right side: Profile, Wallet ID, Notifications, Logout separated by thin lines */}
+          {/* Right side: Profile, Notifications, Logout separated by thin lines */}
           <div className="flex items-center gap-6 h-full font-medium">
             <div className="flex items-center gap-3">
               <span className="text-charcoal-black font-bold">{user?.name ?? 'ANDO TADAO'}</span>
             </div>
-            <span className="w-px h-4 bg-grid-line" aria-hidden="true" />
-            <span className="text-medium-concrete">ID: {user?.walletId ?? 'WL-8802-9901'}</span>
             <span className="w-px h-4 bg-grid-line" aria-hidden="true" />
 
             <button className="hover:text-medium-concrete transition-colors duration-100 cursor-pointer flex items-center gap-2">

@@ -1,8 +1,10 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import api from '../../api';
+import { useAuth } from './AuthContext';
 
 export interface Transaction {
   id: string;
-  type: 'send' | 'receive';
+  type: 'send' | 'receive' | 'deposit' | 'withdraw';
   amount: number;
   recipient?: string;
   sender?: string;
@@ -14,86 +16,138 @@ export interface Transaction {
 interface WalletContextType {
   balance: number;
   transactions: Transaction[];
-  addTransaction: (transaction: Omit<Transaction, 'id' | 'date'>) => void;
-  updateBalance: (amount: number) => void;
+  loading: boolean;
+  error: string | null;
+  refreshWallet: () => Promise<void>;
+  transfer: (receiverPhone: string, amount: number, message: string, otpCode: string) => Promise<any>;
+  deposit: (amount: number, message: string) => Promise<any>;
+  withdraw: (amount: number, message: string) => Promise<any>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
-export function WalletProvider({ children }: { children: ReactNode }) {
-  const [balance, setBalance] = useState<number>(() => {
-    const saved = localStorage.getItem('wallet_balance');
-    return saved ? parseFloat(saved) : 10000.00;
-  });
+const mapBackendTransaction = (tx: any, userPhone: string): Transaction => {
+  let type: 'send' | 'receive' | 'deposit' | 'withdraw' = 'send';
+  let sender = tx.senderPhone;
+  let recipient = tx.receiverPhone;
 
-  const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    const saved = localStorage.getItem('wallet_transactions');
-    if (saved) {
-      return JSON.parse(saved);
+  if (tx.type === 'DEPOSIT') {
+    type = 'receive';
+    sender = 'Bank Deposit';
+  } else if (tx.type === 'WITHDRAW') {
+    type = 'send';
+    recipient = 'Bank Withdrawal';
+  } else if (tx.type === 'TRANSFER') {
+    if (tx.senderPhone === userPhone) {
+      type = 'send';
+    } else {
+      type = 'receive';
     }
-    return [
-      {
-        id: '1',
-        type: 'receive',
-        amount: 5000.00,
-        sender: 'SALARY DEPOSIT',
-        date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-        status: 'completed',
-        message: 'Monthly payroll transfer'
-      },
-      {
-        id: '2',
-        type: 'send',
-        amount: 150.00,
-        recipient: 'GROCERY STORE',
-        date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-        status: 'completed',
-        message: 'Weekly grocery supplies'
-      },
-      {
-        id: '3',
-        type: 'send',
-        amount: 75.50,
-        recipient: 'UTILITY PAYMENT',
-        date: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
-        status: 'completed',
-        message: 'Electricity bill payment'
+  }
+
+  let status: 'completed' | 'pending' | 'failed' = 'completed';
+  if (tx.status === 'SUCCESS') status = 'completed';
+  else if (tx.status === 'FAILED') status = 'failed';
+  else if (tx.status === 'PENDING') status = 'pending';
+
+  return {
+    id: String(tx.id),
+    type,
+    amount: tx.amount,
+    sender: sender === 'SYSTEM' ? 'External Deposit' : sender,
+    recipient: recipient === 'SYSTEM' ? 'External System' : recipient,
+    date: tx.createdAt,
+    status,
+    message: tx.message
+  };
+};
+
+export function WalletProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const [balance, setBalance] = useState<number>(0.00);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refreshWallet = async () => {
+    if (!user) return;
+    setLoading(true);
+    setError(null);
+    try {
+      // 1. Fetch balance
+      const balanceRes: any = await api.get('/wallets/balance');
+      if (balanceRes && balanceRes.data !== undefined) {
+        setBalance(Number(balanceRes.data));
       }
-    ];
-  });
 
-  useEffect(() => {
-    localStorage.setItem('wallet_balance', balance.toString());
-  }, [balance]);
-
-  useEffect(() => {
-    localStorage.setItem('wallet_transactions', JSON.stringify(transactions));
-  }, [transactions]);
-
-  const addTransaction = (transaction: Omit<Transaction, 'id' | 'date'>) => {
-    const newTransaction: Transaction = {
-      ...transaction,
-      id: Date.now().toString(),
-      date: new Date().toISOString()
-    };
-
-    setTransactions(prev => [newTransaction, ...prev]);
-
-    if (transaction.status === 'completed') {
-      if (transaction.type === 'send') {
-        setBalance(prev => prev - transaction.amount);
-      } else {
-        setBalance(prev => prev + transaction.amount);
+      // 2. Fetch history
+      const historyRes: any = await api.get('/wallets/history');
+      if (historyRes && historyRes.data) {
+        const mapped = historyRes.data.map((tx: any) => mapBackendTransaction(tx, user.phone));
+        // Sort descending by date/id
+        mapped.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setTransactions(mapped);
       }
+    } catch (err: any) {
+      console.error('Failed to load wallet data:', err);
+      setError(err.response?.data?.message || 'Failed to refresh wallet');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const updateBalance = (amount: number) => {
-    setBalance(amount);
+  useEffect(() => {
+    if (user) {
+      refreshWallet();
+    } else {
+      setBalance(0.00);
+      setTransactions([]);
+    }
+  }, [user]);
+
+  const transfer = async (receiverPhone: string, amount: number, message: string, otpCode: string) => {
+    try {
+      const res = await api.post('/wallets/transfer', {
+        receiverPhone,
+        amount,
+        message,
+        otpCode
+      });
+      await refreshWallet();
+      return res;
+    } catch (err: any) {
+      throw err;
+    }
+  };
+
+  const deposit = async (amount: number, message: string) => {
+    try {
+      const res = await api.post('/wallets/deposit', {
+        amount,
+        message
+      });
+      await refreshWallet();
+      return res;
+    } catch (err: any) {
+      throw err;
+    }
+  };
+
+  const withdraw = async (amount: number, message: string) => {
+    try {
+      const res = await api.post('/wallets/withdraw', {
+        amount,
+        message
+      });
+      await refreshWallet();
+      return res;
+    } catch (err: any) {
+      throw err;
+    }
   };
 
   return (
-    <WalletContext.Provider value={{ balance, transactions, addTransaction, updateBalance }}>
+    <WalletContext.Provider value={{ balance, transactions, loading, error, refreshWallet, transfer, deposit, withdraw }}>
       {children}
     </WalletContext.Provider>
   );

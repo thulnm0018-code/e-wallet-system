@@ -4,12 +4,13 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowDownRight, ArrowUpRight, Clock3, User } from 'lucide-react';
 
 export function Dashboard() {
-  const { balance, transactions } = useWallet();
+  const { balance, transactions, loading, refreshWallet } = useWallet();
   const navigate = useNavigate();
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
-  // Close modal on escape keypress
+  // Close modal on escape keypress and trigger refresh wallet on mount
   useEffect(() => {
+    refreshWallet();
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setSelectedTransaction(null);
@@ -219,11 +220,11 @@ export function Dashboard() {
                   </tr>
                   <tr className="border-b border-grid-line">
                     <td className="px-6 py-4 font-semibold uppercase text-charcoal-black/60 border-r border-grid-line">Sender</td>
-                    <td className="px-6 py-4 text-charcoal-black">{selectedTransaction.type === 'receive' ? selectedTransaction.sender || 'EXTERNAL DEPOSIT' : 'ANDO TADAO (YOU)'}</td>
+                    <td className="px-6 py-4 text-charcoal-black">{selectedTransaction.sender || 'Unknown'}</td>
                   </tr>
                   <tr className="border-b border-grid-line">
                     <td className="px-6 py-4 font-semibold uppercase text-charcoal-black/60 border-r border-grid-line">Receiver</td>
-                    <td className="px-6 py-4 text-charcoal-black">{selectedTransaction.type === 'send' ? selectedTransaction.recipient || 'EXTERNAL SYSTEM' : 'ANDO TADAO (YOU)'}</td>
+                    <td className="px-6 py-4 text-charcoal-black">{selectedTransaction.recipient || 'Unknown'}</td>
                   </tr>
                   <tr className="border-b border-grid-line">
                     <td className="px-6 py-4 font-semibold uppercase text-charcoal-black/60 border-r border-grid-line">Amount</td>

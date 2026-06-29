@@ -3,12 +3,14 @@ import { Card } from './Card';
 import { Button } from './Button';
 import { useNavigate } from 'react-router-dom';
 import { Copy, Check } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export function Receive() {
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
+  const { user } = useAuth();
 
-  const walletAddress = 'WALLET-' + Math.random().toString(36).substring(2, 15).toUpperCase();
+  const walletAddress = user?.phone ?? 'Unknown';
 
   const handleCopy = () => {
     navigator.clipboard.writeText(walletAddress);

@@ -107,7 +107,17 @@ public class GlobalExceptionHandler {
                         .build());
         }
         
-        @ExceptionHandler(Exception.class)
+        @ExceptionHandler(AccountInactiveException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccountInactive(AccountInactiveException ex) {
+        log.warn(ex.getMessage());
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.<Void>builder()
+                        .message(ex.getMessage())
+                        .build());
+    }
+
+    @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleAll(Exception ex) {
         log.error("Unexpected error occurred", ex);
         

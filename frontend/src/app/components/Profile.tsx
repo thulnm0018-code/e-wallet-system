@@ -133,15 +133,6 @@ export function Profile() {
             </div>
             <div className="flex flex-wrap items-center gap-3 text-[12px] uppercase tracking-[0.25em] text-charcoal-black/75">
               <span>ID: {walletId}</span>
-              <span className="hidden sm:block w-px h-5 bg-grid-line" aria-hidden="true" />
-              <button className="hover:text-charcoal-black transition-colors duration-150 focus:outline-none focus:ring-1 focus:ring-charcoal-black">Notifications</button>
-              <span className="hidden sm:block w-px h-5 bg-grid-line" aria-hidden="true" />
-              <button
-                onClick={() => { logout(); navigate('/login'); }}
-                className="hover:text-charcoal-black transition-colors duration-150 focus:outline-none focus:ring-1 focus:ring-charcoal-black"
-              >
-                Logout
-              </button>
             </div>
           </div>
           <div className="h-px bg-grid-line" aria-hidden="true" />

@@ -2,14 +2,17 @@ package com.ewallet.backend.service;
 
 import com.ewallet.backend.dto.request.DepositRequest;
 import com.ewallet.backend.dto.request.TransferRequest;
+import com.ewallet.backend.dto.request.TransferInitiateRequest;
 import com.ewallet.backend.dto.request.WithdrawRequest;
 import com.ewallet.backend.dto.response.TransactionResponse;
+import com.ewallet.backend.dto.response.TransferOtpResponse;
 
 
 import java.math.BigDecimal;
 import java.util.List;
 
 public interface WalletService {
+    TransferOtpResponse initiateTransfer(TransferInitiateRequest request);
     TransactionResponse transferMoney(TransferRequest request);
     List<TransactionResponse> getMyHistory();
     BigDecimal getMyBalance();

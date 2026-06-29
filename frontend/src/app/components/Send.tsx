@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useWallet } from '../context/WalletContext';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, AlertCircle, ArrowLeft, ArrowRight, ShieldCheck, Lock } from 'lucide-react';
+import api from '../../api';
 
 interface MockReceiver {
   phone: string;
@@ -18,7 +19,7 @@ const mockReceivers: MockReceiver[] = [
 type TransferStep = 'RECIPIENT' | 'AMOUNT' | 'CONFIRMATION' | 'SUCCESS';
 
 export function Send() {
-  const { balance, addTransaction } = useWallet();
+  const { balance, transfer } = useWallet();
   const navigate = useNavigate();
 
   // Step state
@@ -29,6 +30,7 @@ export function Send() {
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [otp, setOtp] = useState<string[]>(Array(6).fill(''));
+  const [displayedOtp, setDisplayedOtp] = useState<string>('');
 
   // Validation/Error states
   const [validatedReceiver, setValidatedReceiver] = useState<MockReceiver | null>(null);
@@ -40,6 +42,7 @@ export function Send() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txTimestamp, setTxTimestamp] = useState('');
   const [txRef, setTxRef] = useState('');
+  const [otpTimeLeft, setOtpTimeLeft] = useState(0);
 
   // OTP inputs ref for autofocus
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -49,24 +52,65 @@ export function Send() {
     const cleanPhone = phone.replace(/\D/g, '');
     
     if (cleanPhone.length === 10) {
-      const match = mockReceivers.find(r => r.phone === cleanPhone);
-      if (match) {
-        if (match.status === 'LOCKED') {
-          setValidatedReceiver(null);
-          setPhoneError('RECEIVER_LOCKED');
-        } else {
-          setValidatedReceiver(match);
-          setPhoneError(null);
+      const fetchReceiver = async () => {
+        try {
+          const response: any = await api.get(`/users/phone/${cleanPhone}`);
+          const userData = response?.data;
+          
+          if (userData?.id) {
+            const receiverStatus = userData.userStatus === 'LOCKED' ? 'LOCKED' : 'ACTIVE';
+
+            if (receiverStatus === 'LOCKED') {
+              setValidatedReceiver(null);
+              setPhoneError('RECEIVER_LOCKED');
+            } else {
+              setValidatedReceiver({
+                phone: userData.phone || cleanPhone,
+                name: userData.name || 'Unknown recipient',
+                walletId: `WL-${userData.id}`,
+                status: receiverStatus
+              });
+              setPhoneError(null);
+            }
+          } else {
+            setValidatedReceiver(null);
+            setPhoneError('NOT_FOUND');
+          }
+        } catch (err: any) {
+          const status = err.response?.status;
+
+          if (status === 404 || status === 400) {
+            setValidatedReceiver(null);
+            setPhoneError('NOT_FOUND');
+          } else {
+            setValidatedReceiver({
+              phone: cleanPhone,
+              name: cleanPhone,
+              walletId: 'PENDING',
+              status: 'ACTIVE'
+            });
+            setPhoneError(null);
+          }
         }
-      } else {
-        setValidatedReceiver(null);
-        setPhoneError('NOT_FOUND');
-      }
+      };
+
+      const delayDebounce = setTimeout(() => {
+        fetchReceiver();
+      }, 500);
+      return () => clearTimeout(delayDebounce);
     } else {
       setValidatedReceiver(null);
       setPhoneError(null);
     }
   }, [phone]);
+
+  // OTP countdown timer
+  useEffect(() => {
+    if (otpTimeLeft <= 0) return;
+
+    const timer = setTimeout(() => setOtpTimeLeft(otpTimeLeft - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [otpTimeLeft]);
 
   // Handle OTP digit changes
   const handleOtpChange = (value: string, index: number) => {
@@ -110,11 +154,48 @@ export function Send() {
     }
 
     setAmountError(null);
-    setStep('CONFIRMATION');
+    
+    // Initiate transfer to generate OTP
+    initiateTransfer();
+  };
+
+  const initiateTransfer = async () => {
+    const cleanPhone = phone.replace(/\D/g, '');
+    const amountNum = parseFloat(amount);
+
+    try {
+      setIsSubmitting(true);
+      const response: any = await api.post('/wallets/transfer/initiate', {
+        receiverPhone: cleanPhone,
+        amount: amountNum,
+        message: note.trim() || undefined
+      });
+
+      const otpData = response?.data;
+      
+      // Show a temporary OTP message (in real implementation, backend would send SMS)
+      if (otpData) {
+        // For demo: show message to check console
+        setSystemError('CHECK_CONSOLE_FOR_OTP');
+        setOtpTimeLeft(300);
+        setStep('CONFIRMATION');
+        setOtp(Array(6).fill(''));
+        setIsSubmitting(false);
+      }
+    } catch (err: any) {
+      console.error('Failed to initiate transfer:', err);
+      setIsSubmitting(false);
+      const errMsg = err?.response?.data?.message || '';
+      if (typeof errMsg === 'string' && errMsg.startsWith('User status is')) {
+        setSystemError(errMsg);
+      } else {
+        setSystemError('INITIATE_FAILED');
+      }
+    }
   };
 
   // Submit transfer action
-  const handleConfirmSubmit = (e: React.FormEvent) => {
+  const handleConfirmSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const enteredOtp = otp.join('');
     
@@ -126,54 +207,49 @@ export function Send() {
     setIsSubmitting(true);
     setSystemError(null);
 
-    // Simulate network delay
-    setTimeout(() => {
-      // 1. Insufficient balance safety check
+    try {
       const amountNum = parseFloat(amount);
-      if (amountNum > balance) {
-        setSystemError('INSUFFICIENT_BALANCE');
-        setIsSubmitting(false);
-        return;
-      }
-
-      // 2. Duplicate Request simulation (OTP: 111111)
-      if (enteredOtp === '111111') {
-        setSystemError('DUPLICATE_REQUEST');
-        setIsSubmitting(false);
-        return;
-      }
-
-      // 3. Database Failure simulation (OTP: 999999)
-      if (enteredOtp === '999999') {
-        setSystemError('DATABASE_FAILURE');
-        setIsSubmitting(false);
-        return;
-      }
-
-      // 4. Success Flow
-      const refCode = `TXN-${Math.floor(10000000 + Math.random() * 90000000)}`;
-      const timestamp = new Date().toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      });
-
-      addTransaction({
-        type: 'send',
-        amount: amountNum,
-        recipient: validatedReceiver?.name || 'KENZO TANGE',
-        status: 'completed',
-        message: note.trim() || undefined
-      });
+      const cleanPhone = phone.replace(/\D/g, '');
+      
+      const response: any = await transfer(cleanPhone, amountNum, note.trim(), enteredOtp);
+      const txn = response.data;
+      
+      const refCode = txn?.transactionCode || `TXN-${Math.floor(10000000 + Math.random() * 90000000)}`;
+      const timestamp = txn?.createdAt 
+        ? new Date(txn.createdAt).toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          })
+        : new Date().toLocaleString('en-US');
 
       setTxRef(refCode);
       setTxTimestamp(timestamp);
       setIsSubmitting(false);
       setStep('SUCCESS');
-    }, 1500);
+    } catch (err: any) {
+      console.error('Transfer failed:', err);
+      setIsSubmitting(false);
+      
+      const errMsg = err.response?.data?.message || '';
+      
+      if (errMsg.toLowerCase().includes('insufficient') || errMsg.toLowerCase().includes('balance')) {
+        setSystemError('INSUFFICIENT_BALANCE');
+      } else if (errMsg.toLowerCase().includes('otp locked')) {
+        setSystemError('OTP_LOCKED');
+      } else if (typeof errMsg === 'string' && errMsg.startsWith('User status is')) {
+        setSystemError(errMsg);
+      } else if (errMsg.toLowerCase().includes('otp') || errMsg.toLowerCase().includes('invalid')) {
+        setSystemError('INVALID_OTP');
+      } else if (errMsg.toLowerCase().includes('conflict') || errMsg.toLowerCase().includes('processing')) {
+        setSystemError('DUPLICATE_REQUEST');
+      } else {
+        setSystemError('DATABASE_FAILURE');
+      }
+    }
   };
 
   // --- RENDERING STEPS ---
@@ -253,6 +329,18 @@ export function Send() {
                 </div>
                 <div className="text-[11px] leading-relaxed text-charcoal-black/60 uppercase tracking-wider">
                   The recipient's wallet has security restrictions active. Please check the address or status.
+                </div>
+              </div>
+            )}
+
+            {phoneError === 'VERIFICATION_UNAVAILABLE' && (
+              <div className="bg-concrete-gray border border-grid-line p-8 space-y-3 animate-fade-in">
+                <div className="text-[12px] uppercase tracking-[0.18em] text-charcoal-black font-bold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  Recipient lookup unavailable
+                </div>
+                <div className="text-[11px] leading-relaxed text-charcoal-black/60 uppercase tracking-wider">
+                  The recipient can still be sent to using the wallet transfer flow. Please continue and confirm the transfer.
                 </div>
               </div>
             )}
@@ -451,10 +539,26 @@ export function Send() {
               </table>
             </div>
 
+            {/* OTP Console Info */}
+            {systemError === 'CHECK_CONSOLE_FOR_OTP' && (
+              <div className="bg-concrete-gray border border-grid-line p-6 space-y-4 animate-fade-in">
+                <div className="text-[12px] uppercase tracking-[0.18em] text-charcoal-black font-bold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  Check Backend Console for OTP
+                </div>
+                <div className="text-[11px] leading-relaxed text-charcoal-black/60 uppercase tracking-wider">
+                  Your OTP code has been generated. Check the backend console output for a message starting with "MA OTP CHUYEN TIEN CHO".
+                </div>
+                <div className="text-[11px] leading-relaxed text-charcoal-black uppercase tracking-wider font-bold">
+                  OTP Expires In: <span className={otpTimeLeft > 60 ? 'text-charcoal-black' : 'text-red-600'}>{Math.floor(otpTimeLeft / 60)}:{String(otpTimeLeft % 60).padStart(2, '0')}</span>
+                </div>
+              </div>
+            )}
+
             {/* OTP Passcode request */}
             <div className="space-y-4 text-center">
               <label className="uppercase tracking-[0.2em] text-[11px] font-bold text-charcoal-black/70 block">
-                Enter 6-Digit Wallet PIN or OTP Code
+                Enter 6-Digit OTP Code
               </label>
               
               <div className="flex justify-between gap-2 max-w-[360px] mx-auto">
@@ -478,6 +582,30 @@ export function Send() {
             </div>
 
             {/* Monochromatic failure states (No bright alerts) */}
+            {systemError === 'OTP_LOCKED' && (
+              <div className="bg-concrete-gray border border-grid-line p-8 text-center space-y-2 animate-fade-in">
+                <div className="text-[12px] uppercase tracking-[0.2em] text-charcoal-black font-bold flex items-center justify-center gap-2">
+                  <Lock className="w-4 h-4" />
+                  OTP Locked
+                </div>
+                <div className="text-[11px] leading-relaxed text-charcoal-black/60 uppercase tracking-wider">
+                  Your OTP has been locked after multiple failed attempts. Please request a new OTP to continue.
+                </div>
+              </div>
+            )}
+
+            {systemError && typeof systemError === 'string' && systemError.startsWith('User status is') && (
+              <div className="bg-concrete-gray border border-grid-line p-8 text-center space-y-2 animate-fade-in">
+                <div className="text-[12px] uppercase tracking-[0.2em] text-charcoal-black font-bold flex items-center justify-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  Account Status
+                </div>
+                <div className="text-[11px] leading-relaxed text-charcoal-black/60 uppercase tracking-wider font-mono">
+                  {systemError}
+                </div>
+              </div>
+            )}
+
             {systemError === 'DUPLICATE_REQUEST' && (
               <div className="bg-concrete-gray border border-grid-line p-8 text-center space-y-2 animate-fade-in">
                 <div className="text-[12px] uppercase tracking-[0.2em] text-charcoal-black font-bold flex items-center justify-center gap-2">
