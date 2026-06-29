@@ -1,6 +1,8 @@
 package com.ewallet.backend.controller;
 
+import com.ewallet.backend.dto.request.DepositRequest;
 import com.ewallet.backend.dto.request.TransferRequest;
+import com.ewallet.backend.dto.request.WithdrawRequest;
 import com.ewallet.backend.dto.response.ApiResponse;
 import com.ewallet.backend.dto.response.TransactionResponse;
 import com.ewallet.backend.service.WalletService;
@@ -50,6 +52,33 @@ public class WalletController {
                 ApiResponse.<BigDecimal>builder()
                         .message("Fetch balance successful")
                         .data(balance)
+                        .build()
+        );
+    }
+
+   @PostMapping("/deposit")
+    public ResponseEntity<ApiResponse<TransactionResponse>> deposit(
+            @Valid @RequestBody DepositRequest request) {
+        TransactionResponse response = walletService.depositMoney(request);
+
+        return ResponseEntity.ok(
+                ApiResponse.<TransactionResponse>builder()
+                        .message("Deposit successful")
+                        .data(response)
+                        .build()
+        );
+    }
+
+    @PostMapping("/withdraw")
+    public ResponseEntity<ApiResponse<TransactionResponse>> withdraw(
+            @Valid @RequestBody WithdrawRequest request) { 
+
+        TransactionResponse response = walletService.withdrawMoney(request);
+
+        return ResponseEntity.ok(
+                ApiResponse.<TransactionResponse>builder()
+                        .message("Withdraw successful")
+                        .data(response)
                         .build()
         );
     }

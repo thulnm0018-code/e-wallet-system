@@ -1,8 +1,11 @@
 package com.ewallet.backend.service.impl;
 
+import jakarta.persistence.LockTimeoutException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import com.ewallet.backend.exception.ResourceConflictException;
+import com.ewallet.backend.dto.request.DepositRequest;
 import com.ewallet.backend.dto.request.TransferRequest;
+import com.ewallet.backend.dto.request.WithdrawRequest;
 import com.ewallet.backend.dto.response.TransactionResponse;
 import com.ewallet.backend.entity.Transaction;
 import com.ewallet.backend.entity.Wallet;
@@ -53,18 +56,14 @@ public class WalletServiceImpl implements WalletService {
     public TransactionResponse transferMoney(TransferRequest request) {
         Long senderUserId = currentUserService.getCurrentUserId();
 
-            if (request.getAmount() == null || request.getAmount().signum() <= 0) {
-            throw new BadRequestException("Amount must be greater than zero");
-        }
+        validateAmount(request.getAmount());
 
         String receiverPhone = PhoneUtils.normalize(request.getReceiverPhone());
         if (receiverPhone == null) {
             throw new BadRequestException("Invalid receiver phone number");
         }
 
-        Wallet senderWalletTemp = walletRepository
-                .findByUser_Id(senderUserId)
-                .orElseThrow(() -> new NotFoundException("Sender wallet not found"));
+        Wallet senderWalletTemp = getWalletByUserId(senderUserId);
 
         Wallet receiverWalletTemp = walletRepository
                 .findByUser_Phone(receiverPhone)
@@ -77,27 +76,8 @@ public class WalletServiceImpl implements WalletService {
         Long firstWalletId = Math.min(senderWalletTemp.getId(), receiverWalletTemp.getId());
         Long secondWalletId = Math.max(senderWalletTemp.getId(), receiverWalletTemp.getId());
 
-        Wallet firstLockedWallet;
-        Wallet secondLockedWallet;
-
-        try {
-            firstLockedWallet = walletRepository
-                    .findByIdForUpdate(firstWalletId)
-                    .orElseThrow(() -> new IllegalStateException(
-                            "Wallet not found during lock acquisition"
-                    ));
-
-            secondLockedWallet = walletRepository
-                    .findByIdForUpdate(secondWalletId)
-                    .orElseThrow(() -> new IllegalStateException(
-                            "Wallet not found during lock acquisition"
-                    ));
-
-        } catch (PessimisticLockingFailureException ex) {
-            throw new ResourceConflictException(
-                    "Wallet is currently being processed. Please try again later."
-            );
-        }
+        Wallet firstLockedWallet = lockWallet(firstWalletId);
+        Wallet secondLockedWallet = lockWallet(secondWalletId);
 
         Wallet senderWallet = firstLockedWallet.getId().equals(senderWalletTemp.getId()) 
                 ? firstLockedWallet 
@@ -107,13 +87,9 @@ public class WalletServiceImpl implements WalletService {
                 ? firstLockedWallet 
                 : secondLockedWallet;
 
-        if (senderWallet.getWalletStatus() != WalletStatus.ACTIVE) {
-            throw new BadRequestException("Sender wallet is inactive");
-        }
-
-        if (receiverWallet.getWalletStatus() != WalletStatus.ACTIVE) {
-            throw new BadRequestException("Receiver wallet is inactive");
-        }
+        
+        validateActiveWallet(senderWallet, "Sender wallet");
+        validateActiveWallet(receiverWallet, "Receiver wallet");
 
         if (senderWallet.getBalance().compareTo(request.getAmount()) < 0) {
             throw new BadRequestException("Insufficient balance");
@@ -142,13 +118,105 @@ public class WalletServiceImpl implements WalletService {
     }
 
     @Override
+    @Transactional
+    public TransactionResponse depositMoney(DepositRequest request) {
+        Long userId = currentUserService.getCurrentUserId();
+
+        validateAmount(request.getAmount());
+
+        Wallet wallet = getWalletByUserId(userId);
+        Wallet lockedWallet = lockWallet(wallet.getId());
+
+    
+        validateActiveWallet(lockedWallet, "Wallet");
+
+
+    lockedWallet.setBalance(lockedWallet.getBalance()
+                .add(request.getAmount()));
+
+    walletRepository.save(lockedWallet);
+
+    Transaction transaction = Transaction.builder()
+            .transactionCode(codeGenerator.generate())
+            .senderWallet(null)
+            .receiverWallet(lockedWallet)
+            .amount(request.getAmount())
+            .message(request.getMessage() == null
+                        || request.getMessage().isBlank()
+                        ? "Deposit money"
+                        : request.getMessage())
+                .type(TransactionType.DEPOSIT)
+                .status(TransactionStatus.SUCCESS)
+                .build();
+
+    Transaction savedTransaction = transactionRepository.save(transaction);
+
+    return transactionMapper.toResponse(savedTransaction);
+}
+    
+    @Override
+    @Transactional
+    public TransactionResponse withdrawMoney(WithdrawRequest request) {
+        Long userId = currentUserService.getCurrentUserId();
+
+        validateAmount(request.getAmount());
+
+        Wallet wallet = getWalletByUserId(userId);
+
+      Wallet lockedWallet = lockWallet(wallet.getId());
+
+        validateActiveWallet(lockedWallet, "Wallet");
+
+
+    if (lockedWallet.getBalance()
+            .compareTo(request.getAmount()) < 0) {
+
+        throw new BadRequestException(
+                "Insufficient balance"
+        );
+    }
+
+    lockedWallet.setBalance(lockedWallet.getBalance()
+                .subtract(request.getAmount()));
+
+    walletRepository.save(lockedWallet);
+
+    Transaction transaction = Transaction.builder()
+            .transactionCode(
+                    codeGenerator.generate()
+            )
+
+            .senderWallet(lockedWallet)
+
+            .receiverWallet(null)
+
+            .amount(request.getAmount())
+
+            .message(
+                    request.getMessage() == null
+                            || request.getMessage().isBlank()
+                            ? "Withdraw money"
+                            : request.getMessage()
+            )
+
+            .type(TransactionType.WITHDRAW)
+            .status(TransactionStatus.SUCCESS)
+            .build();
+
+    Transaction savedTransaction =
+            transactionRepository.save(transaction);
+
+    return transactionMapper.toResponse(
+            savedTransaction
+    );
+}
+
+    @Override
     @Transactional(readOnly = true)
     public List<TransactionResponse> getMyHistory() {
        Long userId = currentUserService.getCurrentUserId();
-
-        Wallet wallet = walletRepository
-                .findByUser_Id(userId)
-                .orElseThrow(() -> new NotFoundException("Wallet not found"));
+       
+        Wallet wallet = getWalletByUserId(userId);
 
         return transactionRepository
                 .findWalletTransactions(wallet.getId())
@@ -162,12 +230,42 @@ public class WalletServiceImpl implements WalletService {
     public BigDecimal getMyBalance() {
         Long userId = currentUserService.getCurrentUserId();
 
-        Wallet wallet = walletRepository
-                .findByUser_Id(userId)
-                .orElseThrow(() -> new NotFoundException("Wallet not found"));
+       Wallet wallet = getWalletByUserId(userId);
 
         return wallet.getBalance();
     }
 
- 
+        private void validateAmount(BigDecimal amount) {
+        if (amount == null || amount.signum() <= 0) {
+            throw new BadRequestException(
+                    "Amount must be greater than zero"
+            );
+        }
+   }
+        private Wallet getWalletByUserId(Long userId) {
+                return walletRepository.findByUser_Id(userId)
+                        .orElseThrow(() -> new NotFoundException("Wallet not found"));
+        }
+        
+        
+        private void validateActiveWallet(Wallet wallet, String walletName) {
+
+        if (wallet.getWalletStatus() != WalletStatus.ACTIVE) {
+                throw new BadRequestException(walletName + " is inactive");}
+        }
+         
+private Wallet lockWallet(Long walletId) {
+
+        try {return walletRepository
+                        .findByIdForUpdate(walletId)
+                        .orElseThrow(() ->
+                new NotFoundException("Wallet not found"));
+        } 
+
+        catch (PessimisticLockingFailureException | LockTimeoutException ex) {
+
+                throw new ResourceConflictException(
+                        "Wallet is currently being processed. Please try again later.");}
+        }
+
 }
