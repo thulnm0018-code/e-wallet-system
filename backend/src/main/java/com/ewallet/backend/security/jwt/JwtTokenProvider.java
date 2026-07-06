@@ -1,4 +1,4 @@
-package com.ewallet.backend.security;
+package com.ewallet.backend.security.jwt;
 
 import com.ewallet.backend.entity.User;
 import io.jsonwebtoken.Claims;
@@ -39,14 +39,14 @@ public class JwtTokenProvider {
         Date expiryDate = new Date(now.getTime() + accessTokenExpiration);
 
         return Jwts.builder()
-                .subject(user.getId().toString())
+                .setSubject(user.getId().toString())
                 .claim("email", user.getEmail())
                 .claim("role", user.getRole().name())
                 .claim("token_type", "ACCESS")
-                .issuer("ewallet")
-                .audience().add("ewallet-client").and()
-                .issuedAt(now)
-                .expiration(expiryDate)
+                .setIssuer("ewallet")
+                .setAudience("ewallet-client")
+                .setIssuedAt(now)
+                .setExpiration(expiryDate)
                 .signWith(getSigningKey())
                 .compact();
     }
@@ -56,23 +56,23 @@ public class JwtTokenProvider {
         Date expiryDate = new Date(now.getTime() + refreshTokenExpiration);
 
         return Jwts.builder()
-                .subject(user.getId().toString())
+                .setSubject(user.getId().toString())
                 .claim("token_type", "REFRESH")
-                .issuer("ewallet")
-                .audience().add("ewallet-client").and()
-                .issuedAt(now)
-                .expiration(expiryDate)
+                .setIssuer("ewallet")
+                .setAudience("ewallet-client")
+                .setIssuedAt(now)
+                .setExpiration(expiryDate)
                 .signWith(getSigningKey())
                 .compact();
     }
 
     public Claims validateToken(String token) {
         try {
-            return Jwts.parser()
-                    .verifyWith(getSigningKey())
+                return Jwts.parser()
+                    .setSigningKey(getSigningKey())
                     .build()
-                    .parseSignedClaims(token)
-                    .getPayload();
+                    .parseClaimsJws(token)
+                    .getBody();
         } catch (SignatureException ex) {
             logger.error("Invalid JWT signature: {}", ex.getMessage());
             throw ex;
