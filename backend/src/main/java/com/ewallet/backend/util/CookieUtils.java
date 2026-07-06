@@ -1,5 +1,6 @@
 package com.ewallet.backend.util;
 
+import java.util.Objects;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.ResponseCookie;
 
@@ -11,7 +12,7 @@ public class CookieUtils {
             String value,
             long maxAgeInSeconds) {
 
-        ResponseCookie cookie = ResponseCookie.from(name, value)
+        ResponseCookie cookie = ResponseCookie.from(Objects.requireNonNull(name),Objects.requireNonNull(value))
                 .httpOnly(true)
                 .secure(true)
                 .path("/")
@@ -24,7 +25,7 @@ public class CookieUtils {
 
     public static void clearCookie(HttpServletResponse response, String name) {
 
-        ResponseCookie cookie = ResponseCookie.from(name, "")
+        ResponseCookie cookie = ResponseCookie.from(Objects.requireNonNull(name), "")
                 .httpOnly(true)
                 .secure(true)
                 .path("/")

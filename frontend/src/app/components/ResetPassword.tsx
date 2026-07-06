@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import api from '../../api';
 import { Button } from './Button';
 import { Input } from './Input';
 
@@ -46,10 +47,23 @@ export function ResetPassword() {
       return;
     }
 
+    if (!identifier) {
+      setPasswordError('Recovery identifier is missing');
+      return;
+    }
+
     setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setLoading(false);
-    setSuccess(true);
+    try {
+      await api.post('/auth/reset-password', {
+        identifier,
+        newPassword: password,
+      });
+      setSuccess(true);
+    } catch (err: any) {
+      setPasswordError(err?.response?.data?.message || 'Unable to reset password');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleRedirectLogin = () => {

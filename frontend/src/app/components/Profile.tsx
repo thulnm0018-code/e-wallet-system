@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, CircleDot, Lock, Monitor } from 'lucide-react';
+import api from '../../api';
 import { useAuth } from '../context/AuthContext';
 
 interface SessionRow {
@@ -68,17 +69,27 @@ export function Profile() {
     setAddress(user.address ?? '13 Kiyomizu Dori, Kyoto');
   }, [user]);
 
-  const handleSave = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isLocked) return;
 
     setSaving(true);
-    setTimeout(() => {
+    setProfileMessage('');
+    try {
+      const response: any = await api.put('/users/profile', {
+        name,
+        email,
+        phone,
+        address,
+      });
       updateUser({ name, email, phone, address });
-      setSaving(false);
-      setProfileMessage('Profile updated successfully');
+      setProfileMessage(response?.message || 'Profile updated successfully');
       window.setTimeout(() => setProfileMessage(''), 3200);
-    }, 350);
+    } catch (error: any) {
+      setProfileMessage(error?.response?.data?.message || 'Unable to update profile');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const resetPasswordModal = () => {
@@ -89,16 +100,10 @@ export function Profile() {
     setPasswordSuccess('');
   };
 
-  const handlePasswordUpdate = (event: React.FormEvent<HTMLFormElement>) => {
+  const handlePasswordUpdate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setPasswordError('');
     setPasswordSuccess('');
-
-    const mockCurrentPassword = 'wallet2026';
-    if (currentPassword !== mockCurrentPassword) {
-      setPasswordError('Wrong current password');
-      return;
-    }
 
     if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
       setPasswordError('Weak password — use at least 8 characters, a number, and an uppercase letter');
@@ -110,11 +115,19 @@ export function Profile() {
       return;
     }
 
-    setPasswordSuccess('Password updated successfully');
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setTimeout(() => setPasswordSuccess(''), 3200);
+    try {
+      await api.put('/users/change-password', {
+        currentPassword,
+        newPassword,
+      });
+      setPasswordSuccess('Password updated successfully');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => setPasswordSuccess(''), 3200);
+    } catch (error: any) {
+      setPasswordError(error?.response?.data?.message || 'Unable to update password');
+    }
   };
 
   return (

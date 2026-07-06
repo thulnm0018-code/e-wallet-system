@@ -6,6 +6,8 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(
@@ -51,6 +53,14 @@ public class Wallet {
     @Version
     @Column(nullable = false)
     private Long version;
+
+    @OneToMany(mappedBy = "senderWallet")
+    @Builder.Default
+    private List<Transaction> sentTransactions = new ArrayList<>();
+
+    @OneToMany(mappedBy = "receiverWallet")
+    @Builder.Default
+    private List<Transaction> receivedTransactions = new ArrayList<>();
 
     @PrePersist
     protected void onCreate() {

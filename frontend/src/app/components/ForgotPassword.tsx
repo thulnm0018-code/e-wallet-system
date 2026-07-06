@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import api from '../../api';
 import { Button } from './Button';
 import { Input } from './Input';
 
@@ -31,10 +32,14 @@ export function ForgotPassword() {
     }
 
     setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setLoading(false);
-
-    navigate('/reset-password', { state: { identifier: trimmed } });
+    try {
+      await api.post('/auth/forgot-password', { identifier: trimmed });
+      navigate('/reset-password', { state: { identifier: trimmed } });
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Unable to process password recovery right now');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

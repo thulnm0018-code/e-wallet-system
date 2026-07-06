@@ -1,5 +1,7 @@
 package com.ewallet.backend.controller;
 
+import com.ewallet.backend.dto.request.ForgotPasswordRequest;
+import com.ewallet.backend.dto.request.ResetPasswordRequest;
 import com.ewallet.backend.dto.request.UserCreateRequest;
 import com.ewallet.backend.dto.request.UserLoginRequest;
 import com.ewallet.backend.dto.request.VerifyOtpRequest;
@@ -93,6 +95,28 @@ public ResponseEntity<ApiResponse<UserResponse>> getCurrentUser() {
         return ResponseEntity.ok(
                 ApiResponse.builder()
                         .message("Logged out successfully")
+                        .data(null)
+                        .build()
+        );
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse<?>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        userService.forgotPassword(request);
+        return ResponseEntity.ok(
+                ApiResponse.builder()
+                        .message("If the account exists, a reset OTP has been generated")
+                        .data(null)
+                        .build()
+        );
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<?>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        userService.resetPassword(request);
+        return ResponseEntity.ok(
+                ApiResponse.builder()
+                        .message("Password reset successfully")
                         .data(null)
                         .build()
         );

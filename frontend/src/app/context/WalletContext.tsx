@@ -74,16 +74,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      // 1. Fetch balance
-      const balanceRes: any = await api.get('/wallets/balance');
-      if (balanceRes && balanceRes.data !== undefined) {
-        setBalance(Number(balanceRes.data));
+      // 1. Fetch wallet info
+      const walletRes: any = await api.get('/wallets/me');
+      if (walletRes) {
+        setBalance(Number(walletRes.balance || 0));
       }
 
       // 2. Fetch history
-      const historyRes: any = await api.get('/wallets/history');
-      if (historyRes && historyRes.data) {
-        const mapped = historyRes.data.map((tx: any) => mapBackendTransaction(tx, user.phone));
+      const historyRes: any = await api.get('/wallets/history?page=0&size=20');
+      if (historyRes) {
+        const mapped = historyRes.map((tx: any) => mapBackendTransaction(tx, user.phone));
         // Sort descending by date/id
         mapped.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
         setTransactions(mapped);

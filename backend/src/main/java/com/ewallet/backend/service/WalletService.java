@@ -6,6 +6,7 @@ import com.ewallet.backend.dto.request.TransferInitiateRequest;
 import com.ewallet.backend.dto.request.WithdrawRequest;
 import com.ewallet.backend.dto.response.TransactionResponse;
 import com.ewallet.backend.dto.response.TransferOtpResponse;
+import com.ewallet.backend.dto.response.WalletResponse;
 
 
 import java.math.BigDecimal;
@@ -19,4 +20,7 @@ public interface WalletService {
     
     TransactionResponse depositMoney(DepositRequest request);
     TransactionResponse withdrawMoney(WithdrawRequest request);
+    WalletResponse getMyWallet();
+    List<TransactionResponse> getMyHistory(String type, String startDate, String endDate);
+    List<TransactionResponse> getMyHistory(String type, String startDate, String endDate, Integer page, Integer size);
 }

@@ -15,7 +15,7 @@ import com.ewallet.backend.repository.RefreshTokenRepository;
 import com.ewallet.backend.repository.WalletRepository;
 import com.ewallet.backend.repository.OtpRepository;
 import com.ewallet.backend.service.AuthService;
-import com.ewallet.backend.security.JwtTokenProvider;
+import com.ewallet.backend.security.jwt.JwtTokenProvider;
 import com.ewallet.backend.util.CookieUtils;
 import com.ewallet.backend.util.PhoneUtils;
 import jakarta.servlet.http.HttpServletRequest;
@@ -27,9 +27,10 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-
+import java.util.Objects;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.util.StringUtils;
 
 @Service
 public class AuthServiceImpl implements AuthService {
@@ -58,7 +59,17 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public LoginResponse login(UserLoginRequest request, HttpServletResponse response) {
-        String input = request.getIdentifier().trim();
+        if (request == null) {
+            throw new UnauthorizedException("Invalid credentials");
+        }
+
+        String input = request.getIdentifier() == null ? "" : request.getIdentifier().trim();
+        String password = request.getPassword() == null ? "" : request.getPassword();
+
+        if (!StringUtils.hasText(input) || !StringUtils.hasText(password)) {
+            throw new UnauthorizedException("Invalid credentials");
+        }
+
         User user;
 
         boolean isEmail = input.matches("^[A-Za-z0-9+_.-]+@(.+)$");
@@ -81,7 +92,7 @@ public class AuthServiceImpl implements AuthService {
             throw new UnauthorizedException("Account is not activated. Please verify your OTP.");
         }
 
-        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
             throw new UnauthorizedException("Invalid credentials");
         }
 
@@ -123,7 +134,11 @@ public class AuthServiceImpl implements AuthService {
                             .expiresAt(LocalDateTime.now().plusDays(7))
                             .build();
 
-            refreshTokenRepository.save(newRefreshToken);
+            if (newRefreshToken == null) {
+        throw new IllegalArgumentException("Refresh token cannot be null");
+            }
+
+refreshTokenRepository.save(newRefreshToken);
 
 
         CookieUtils.createCookie(response, "accessToken", newAccessToken, 900);
@@ -194,7 +209,7 @@ public class AuthServiceImpl implements AuthService {
                 .expiresAt(LocalDateTime.now().plusDays(7))
                 .build();
 
-        refreshTokenRepository.save(refreshToken);
+        refreshTokenRepository.save(Objects.requireNonNull(refreshToken));
 
         CookieUtils.createCookie(response, "accessToken", accessToken, 900);
         CookieUtils.createCookie(response, "refreshToken", refreshTokenValue, 604800);
@@ -220,7 +235,11 @@ public class AuthServiceImpl implements AuthService {
 @Transactional
 public void verifyOtp(String phoneOrEmail, String otpCode) {
 
-    String input = phoneOrEmail.trim();
+    String input = phoneOrEmail == null ? "" : phoneOrEmail.trim();
+    if (!StringUtils.hasText(input) || !StringUtils.hasText(otpCode)) {
+        throw new RuntimeException("Invalid OTP");
+    }
+
     boolean isEmail = input.matches("^[A-Za-z0-9+_.-]+@(.+)$");
     String normalizedIdentifier = input;
     if (isEmail) {
@@ -270,7 +289,7 @@ public void verifyOtp(String phoneOrEmail, String otpCode) {
                 .walletStatus(WalletStatus.ACTIVE)
                 .build();
 
-        walletRepository.save(wallet);
+     walletRepository.save(Objects.requireNonNull(wallet));
 
         user.setWallet(wallet);
     }

@@ -11,6 +11,7 @@ import com.ewallet.backend.dto.request.TransferInitiateRequest;
 import com.ewallet.backend.dto.request.WithdrawRequest;
 import com.ewallet.backend.dto.response.TransactionResponse;
 import com.ewallet.backend.dto.response.TransferOtpResponse;
+import com.ewallet.backend.dto.response.WalletResponse;
 import com.ewallet.backend.entity.Transaction;
 import com.ewallet.backend.entity.Wallet;
 import com.ewallet.backend.entity.Otp;
@@ -22,7 +23,7 @@ import com.ewallet.backend.enums.WalletStatus;
 import com.ewallet.backend.repository.TransactionRepository;
 import com.ewallet.backend.repository.WalletRepository;
 import com.ewallet.backend.repository.OtpRepository;
-import com.ewallet.backend.security.CurrentUserService;
+import com.ewallet.backend.security.service.CurrentUserService;
 import com.ewallet.backend.service.WalletService;
 import com.ewallet.backend.util.PhoneUtils;
 import com.ewallet.backend.util.TransactionCodeGenerator;
@@ -35,9 +36,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 @Service
 public class WalletServiceImpl implements WalletService {
@@ -48,7 +54,6 @@ public class WalletServiceImpl implements WalletService {
     private final CurrentUserService currentUserService;
     private final TransactionMapper transactionMapper;
     private final OtpRepository otpRepository;
-    private final com.ewallet.backend.repository.UserRepository userRepository;
 
     public WalletServiceImpl(
             WalletRepository walletRepository,
@@ -56,8 +61,7 @@ public class WalletServiceImpl implements WalletService {
             TransactionCodeGenerator codeGenerator,
             CurrentUserService currentUserService,
             TransactionMapper transactionMapper,
-            OtpRepository otpRepository,
-            com.ewallet.backend.repository.UserRepository userRepository) {
+            OtpRepository otpRepository) {
 
         this.walletRepository = walletRepository;
         this.transactionRepository = transactionRepository;
@@ -65,7 +69,7 @@ public class WalletServiceImpl implements WalletService {
         this.currentUserService = currentUserService;
         this.transactionMapper = transactionMapper;
         this.otpRepository = otpRepository;
-        this.userRepository = userRepository;
+  
     }
 
     private static final Logger log = LoggerFactory.getLogger(WalletServiceImpl.class);
@@ -122,7 +126,7 @@ public class WalletServiceImpl implements WalletService {
             .receiverPhone(receiverPhone)
             .build();
 
-        otpRepository.save(otp);
+        otpRepository.save(Objects.requireNonNull(otp));
         
         log.info("[TRANSFER-INITIATE] OTP saved to database for user {}", senderWallet.getUser().getPhone());
 
@@ -235,8 +239,9 @@ public class WalletServiceImpl implements WalletService {
 
         senderWallet.setBalance(senderWallet.getBalance().subtract(request.getAmount()));
         receiverWallet.setBalance(receiverWallet.getBalance().add(request.getAmount()));
+    
+    walletRepository.saveAll(Objects.requireNonNull(List.of(senderWallet, receiverWallet)));
 
-        walletRepository.saveAll(List.of(senderWallet, receiverWallet));
 
         Transaction transaction = Transaction.builder()
                 
@@ -251,7 +256,10 @@ public class WalletServiceImpl implements WalletService {
                 .status(TransactionStatus.SUCCESS)
                 .build();
 
-        Transaction savedTransaction = transactionRepository.save(transaction);
+        Transaction savedTransaction =
+        transactionRepository.save(
+                Objects.requireNonNull(transaction)
+        );
 
         otp.setFailedAttempts(0);
         otp.setVerified(true);
@@ -290,7 +298,10 @@ public class WalletServiceImpl implements WalletService {
                 .status(TransactionStatus.SUCCESS)
                 .build();
 
-    Transaction savedTransaction = transactionRepository.save(transaction);
+    Transaction savedTransaction =
+            transactionRepository.save(
+                    Objects.requireNonNull(transaction)
+            );
 
     return transactionMapper.toResponse(savedTransaction);
 }
@@ -344,7 +355,9 @@ public class WalletServiceImpl implements WalletService {
             .build();
 
     Transaction savedTransaction =
-            transactionRepository.save(transaction);
+            transactionRepository.save(
+                    Objects.requireNonNull(transaction)
+            );
 
     return transactionMapper.toResponse(
             savedTransaction
@@ -354,15 +367,57 @@ public class WalletServiceImpl implements WalletService {
     @Override
     @Transactional(readOnly = true)
     public List<TransactionResponse> getMyHistory() {
-       Long userId = currentUserService.getCurrentUserId();
-       
+        return getMyHistory(null, null, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TransactionResponse> getMyHistory(String type, String startDate, String endDate) {
+        return getMyHistory(type, startDate, endDate, 0, 50);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TransactionResponse> getMyHistory(String type, String startDate, String endDate, Integer page, Integer size) {
+        Long userId = currentUserService.getCurrentUserId();
         Wallet wallet = getWalletByUserId(userId);
 
+        TransactionType transactionType = null;
+        if (type != null && !type.isBlank()) {
+            try {
+                transactionType = TransactionType.valueOf(type.toUpperCase());
+            } catch (IllegalArgumentException ex) {
+                throw new BadRequestException("Invalid transaction type");
+            }
+        }
+
+        LocalDateTime start = parseDate(startDate, true);
+        LocalDateTime end = parseDate(endDate, false);
+
+        int safePage = page == null || page < 0 ? 0 : page;
+        int safeSize = size == null || size <= 0 ? 20 : Math.min(size, 100);
+        Pageable pageable = PageRequest.of(safePage, safeSize);
+
         return transactionRepository
-                .findWalletTransactions(wallet.getId())
+                .findWalletTransactions(wallet.getId(), transactionType, start, end, pageable)
                 .stream()
                 .map(transactionMapper::toResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public WalletResponse getMyWallet() {
+        Long userId = currentUserService.getCurrentUserId();
+        Wallet wallet = getWalletByUserId(userId);
+
+        return WalletResponse.builder()
+                .id(wallet.getId())
+                .phone(wallet.getUser().getPhone())
+                .name(wallet.getUser().getName())
+                .balance(wallet.getBalance())
+                .walletStatus(wallet.getWalletStatus().name())
+                .build();
     }
 
     @Override
@@ -392,18 +447,38 @@ public class WalletServiceImpl implements WalletService {
         }
     }
 
-    private void validateUserStatus(User user) {
+        private void validateUserStatus(User user) {
+
         if (user == null) {
-            throw new NotFoundException("User not found");
+                throw new NotFoundException("User not found");
         }
-        if (user.getUserStatus() != UserStatus.ACTIVE) {
-            if (user.getUserStatus() == UserStatus.LOCKED || user.getUserStatus() == UserStatus.BANNED) {
-                throw new AccountInactiveException("User status is " + user.getUserStatus());
-            }
-            throw new BadRequestException("User status is " + user.getUserStatus());
+
+        UserStatus status = user.getUserStatus();
+
+        if (status == UserStatus.ACTIVE) {
+                return;
         }
-    }
+
+        if (status == UserStatus.LOCKED) {
+                throw new AccountInactiveException(
+                        "User status is LOCKED"
+                );
+        }
+
+        throw new BadRequestException(
+                "User status is " + status
+        );
+}
          
+    private LocalDateTime parseDate(String value, boolean startOfDay) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        LocalDate date = LocalDate.parse(value);
+        return startOfDay ? date.atStartOfDay() : date.atTime(LocalTime.MAX);
+    }
+
 private Wallet lockWallet(Long walletId) {
 
         try {return walletRepository

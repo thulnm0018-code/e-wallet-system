@@ -1,0 +1,61 @@
+services:
+
+  mysql:
+    image: mysql:8.0
+    container_name: ewallet-mysql
+    restart: always
+
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+
+    ports:
+      - "3306:3306"
+
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  backend:
+    build:
+      context: ./backend
+
+    container_name: ewallet-backend
+
+    depends_on:
+      - mysql
+
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME}
+
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+
+      JWT_SECRET: ${JWT_SECRET}
+
+      JWT_ACCESS_EXPIRATION_MS: ${JWT_ACCESS_EXPIRATION_MS}
+      JWT_REFRESH_EXPIRATION_MS: ${JWT_REFRESH_EXPIRATION_MS}
+
+      SERVER_PORT: ${SERVER_PORT}
+      CLIENT_URL: ${CLIENT_URL}
+
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+
+    container_name: ewallet-frontend
+
+    depends_on:
+      - backend
+
+    ports:
+      - "3000:80"
+
+volumes:
+  mysql_data:

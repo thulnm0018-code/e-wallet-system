@@ -2,13 +2,20 @@ import { useState } from 'react';
 import { Card } from './Card';
 import { Button } from './Button';
 import { useNavigate } from 'react-router-dom';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, DollarSign } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useWallet } from '../context/WalletContext';
+import api from '../../api';
 
 export function Receive() {
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
+  const [depositAmount, setDepositAmount] = useState('');
+  const [depositMessage, setDepositMessage] = useState('');
+  const [depositStatus, setDepositStatus] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const { user } = useAuth();
+  const { deposit, refreshWallet } = useWallet();
 
   const walletAddress = user?.phone ?? 'Unknown';
 
@@ -16,6 +23,29 @@ export function Receive() {
     navigator.clipboard.writeText(walletAddress);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDeposit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = Number(depositAmount);
+    if (!amount || amount <= 0) {
+      setDepositStatus('Please enter a valid amount');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setDepositStatus(null);
+      await deposit(amount, depositMessage.trim() || 'Demo deposit');
+      setDepositAmount('');
+      setDepositMessage('');
+      setDepositStatus('Deposit successful');
+      await refreshWallet();
+    } catch (error: any) {
+      setDepositStatus(error?.response?.data?.message || 'Deposit failed');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -73,16 +103,33 @@ export function Receive() {
         <Card className="p-12 bg-stone-white border-grid-line">
           <div className="space-y-6">
             <div className="text-[13px] uppercase tracking-[0.15em] text-charcoal-black/60">
-              IMPORTANT NOTICE
+              DEMO DEPOSIT
             </div>
-            <div className="space-y-4 text-[15px] leading-relaxed tracking-wide text-charcoal-black/80">
-              <p>
-                This is a demonstration wallet address. In a production environment, this would be your unique blockchain or payment network identifier.
-              </p>
-              <p>
-                Share this address only with trusted parties who need to send you funds.
-              </p>
-            </div>
+            <form onSubmit={handleDeposit} className="space-y-4">
+              <input
+                type="number"
+                min="1"
+                step="0.01"
+                placeholder="Amount"
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+                className="w-full border border-grid-line px-4 py-3 text-charcoal-black"
+              />
+              <input
+                type="text"
+                placeholder="Message (optional)"
+                value={depositMessage}
+                onChange={(e) => setDepositMessage(e.target.value)}
+                className="w-full border border-grid-line px-4 py-3 text-charcoal-black"
+              />
+              <Button variant="primary" type="submit" className="w-full flex items-center justify-center gap-2" disabled={submitting}>
+                <DollarSign className="w-4 h-4" />
+                {submitting ? 'PROCESSING...' : 'DEPOSIT FUNDS'}
+              </Button>
+            </form>
+            {depositStatus && (
+              <div className="text-sm text-charcoal-black/80">{depositStatus}</div>
+            )}
           </div>
         </Card>
       </div>

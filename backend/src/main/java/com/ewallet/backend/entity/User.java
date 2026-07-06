@@ -1,6 +1,8 @@
 package com.ewallet.backend.entity;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import jakarta.persistence.*;
 import com.ewallet.backend.enums.UserStatus;
 
@@ -46,6 +48,9 @@ public class User {
 
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL)
     private Wallet wallet;
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Otp> otps = new ArrayList<>();
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

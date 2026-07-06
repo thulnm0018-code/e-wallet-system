@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import api from '../../api';
 import { useWallet } from '../context/WalletContext';
 import {
   Users, Activity, Database, Terminal, Bell, Lock, Unlock, Trash2,
@@ -31,6 +32,26 @@ interface SlideNotification {
   id: string;
   message: string;
   timestamp: string;
+}
+
+interface AdminUserPayload {
+  id: number;
+  name: string;
+  phone: string;
+  userStatus: 'ACTIVE' | 'LOCKED' | 'BANNED' | 'PENDING_VERIFICATION' | string;
+  balance: number;
+  createdAt?: string;
+}
+
+interface AdminTransactionPayload {
+  id: number;
+  transactionCode: string;
+  sender: string | null;
+  receiver: string | null;
+  amount: number;
+  type: string;
+  status: string;
+  createdAt: string;
 }
 
 export function AdminDashboard() {
@@ -68,35 +89,8 @@ export function AdminDashboard() {
   };
 
   // Simulated State Data
-  const [users, setUsers] = useState<SimulatedUser[]>(() => {
-    const defaultUsers: SimulatedUser[] = [
-      { id: 'WL-8802-9901', name: 'ANDO TADAO', phone: '+81-3-3408-1111', status: 'ACTIVE', balance: 254800.00, lastActivity: '2 mins ago' },
-      { id: 'WL-8802-9902', name: 'KENGO KUMA', phone: '+81-3-3476-4444', status: 'ACTIVE', balance: 189250.50, lastActivity: '15 mins ago' },
-      { id: 'WL-8802-9903', name: 'TOYO ITO', phone: '+81-3-3450-5555', status: 'ACTIVE', balance: 98400.00, lastActivity: '1 hour ago' },
-      { id: 'WL-8802-9904', name: 'SHIGERU BAN', phone: '+81-3-3490-6666', status: 'ACTIVE', balance: 45000.00, lastActivity: '4 hours ago' },
-      { id: 'WL-8802-9905', name: 'SANAA STUDIO', phone: '+81-3-3430-7777', status: 'ACTIVE', balance: 320600.00, lastActivity: '5 mins ago' },
-      { id: 'WL-8802-9906', name: 'ARATA ISOZAKI', phone: '+81-3-3420-8888', status: 'LOCKED', balance: 12300.00, lastActivity: '3 days ago' },
-    ];
-    try {
-      const reg = localStorage.getItem('registered_users');
-      if (reg) {
-        const parsed = JSON.parse(reg);
-        const mapped = parsed.map((u: any) => ({
-          id: u.id,
-          name: u.name || u.fullName,
-          phone: u.phone,
-          status: u.walletStatus || 'ACTIVE',
-          balance: u.balance || 10000.00,
-          lastActivity: u.lastActivity || 'Just registered'
-        }));
-        const filtered = mapped.filter((mu: any) => !defaultUsers.some(du => du.id === mu.id || du.phone === mu.phone));
-        return [...defaultUsers, ...filtered];
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    return defaultUsers;
-  });
+  const [users, setUsers] = useState<SimulatedUser[]>([]);
+  const [dashboardStats, setDashboardStats] = useState({ totalUsers: 0, activeWallets: 0, totalVolume: 0, pendingReviews: 0 });
 
   const [suspiciousTxns, setSuspiciousTxns] = useState<SuspiciousTransaction[]>([
     { id: 'TXN-101', type: 'send', amount: 12500.00, initiator: 'TOYO ITO', counterparty: 'UNKNOWN OFFSHORE BANK', reason: 'DEBIT TRANSFER TO UNREGISTERED LEDGER', status: 'PENDING REVIEW', timestamp: '12 mins ago' },
@@ -115,6 +109,51 @@ export function AdminDashboard() {
 
   // Notifications slide toasts state
   const [notifications, setNotifications] = useState<SlideNotification[]>([]);
+
+  useEffect(() => {
+    const loadAdminData = async () => {
+      try {
+        const [usersResponse, transactionsResponse, dashboardResponse]: any = await Promise.all([
+          api.get('/users/admin'),
+          api.get('/users/admin/transactions'),
+          api.get('/users/admin/dashboard'),
+        ]);
+
+        const adminUsers = (usersResponse?.data || []).map((user: AdminUserPayload) => ({
+          id: String(user.id),
+          name: user.name,
+          phone: user.phone,
+          status: user.userStatus === 'LOCKED' ? 'LOCKED' : 'ACTIVE',
+          balance: Number(user.balance || 0),
+          lastActivity: user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Just registered',
+        }));
+
+        const adminTransactions = (transactionsResponse?.data || []).map((txn: AdminTransactionPayload) => ({
+          id: `TXN-${txn.id}`,
+          type: txn.type === 'TRANSFER' ? 'send' : 'receive',
+          amount: Number(txn.amount || 0),
+          initiator: txn.sender || 'SYSTEM',
+          counterparty: txn.receiver || 'SYSTEM',
+          reason: txn.transactionCode,
+          status: txn.status === 'PENDING' ? 'PENDING REVIEW' : txn.status === 'SUCCESS' ? 'APPROVED' : 'REJECTED',
+          timestamp: new Date(txn.createdAt).toLocaleDateString(),
+        }));
+
+        setUsers(adminUsers);
+        setSuspiciousTxns(adminTransactions.length > 0 ? adminTransactions : suspiciousTxns);
+        setDashboardStats({
+          totalUsers: Number(dashboardResponse?.data?.totalUsers || adminUsers.length),
+          activeWallets: Number(dashboardResponse?.data?.activeWallets || adminUsers.filter((u: SimulatedUser) => u.status === 'ACTIVE').length),
+          totalVolume: Number(dashboardResponse?.data?.totalVolume || 0),
+          pendingReviews: Number(dashboardResponse?.data?.pendingReviews || 0),
+        });
+      } catch (error) {
+        console.error('Unable to load admin data', error);
+      }
+    };
+
+    loadAdminData();
+  }, []);
 
   // Lock Account Flow Modal State
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
@@ -210,12 +249,12 @@ export function AdminDashboard() {
     const totalBalance = users.reduce((acc, u) => acc + u.balance, 0);
     const suspiciousCount = suspiciousTxns.filter(t => t.status === 'PENDING REVIEW' || t.status === 'FLAGGED').length;
     return {
-      totalUsers: users.length,
-      activeWallets: users.filter(u => u.status === 'ACTIVE').length,
-      txnVolume: totalBalance + 1290300.00,
-      suspicious: suspiciousCount
+      totalUsers: dashboardStats.totalUsers || users.length,
+      activeWallets: dashboardStats.activeWallets || users.filter(u => u.status === 'ACTIVE').length,
+      txnVolume: dashboardStats.totalVolume || totalBalance,
+      suspicious: dashboardStats.pendingReviews || suspiciousCount,
     };
-  }, [users, suspiciousTxns]);
+  }, [users, suspiciousTxns, dashboardStats]);
 
   return (
     <div className="w-full max-w-[1440px] mx-auto min-h-[1024px] bg-stone-white flex flex-col md:flex-row border-x border-grid-line font-sans relative select-none">
