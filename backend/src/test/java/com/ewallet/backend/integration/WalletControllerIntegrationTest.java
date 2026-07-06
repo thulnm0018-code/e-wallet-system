@@ -23,6 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -64,6 +65,9 @@ class WalletControllerIntegrationTest {
 
     @Autowired
     private JwtTokenProvider jwtTokenProvider;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     private String token;
     private User sender;
@@ -271,6 +275,7 @@ class WalletControllerIntegrationTest {
 
     @Test
     void history_shouldReturnPaginatedTransactionsForAuthenticatedUser() throws Exception {
+        LocalDateTime now = LocalDateTime.now();
         for (int i = 1; i <= 3; i++) {
             Transaction tx = Transaction.builder()
                     .transactionCode("TX-00" + i)
@@ -281,8 +286,11 @@ class WalletControllerIntegrationTest {
                     .status(TransactionStatus.SUCCESS)
                     .type(TransactionType.TRANSFER)
                     .build();
-            transactionRepository.save(tx);
-            Thread.sleep(20);
+            Transaction savedTx = transactionRepository.saveAndFlush(tx);
+            
+            LocalDateTime txTime = now.minusMinutes(3 - i);
+            jdbcTemplate.update("UPDATE transactions SET created_at = ? WHERE id = ?", 
+                    java.sql.Timestamp.valueOf(txTime), savedTx.getId());
         }
 
         mockMvc.perform(get("/api/v1/wallets/history")
