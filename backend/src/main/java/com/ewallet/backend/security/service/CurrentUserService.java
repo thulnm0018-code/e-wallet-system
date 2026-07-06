@@ -1,4 +1,4 @@
-package com.ewallet.backend.security;
+package com.ewallet.backend.security.service;
 
 public interface CurrentUserService {
 

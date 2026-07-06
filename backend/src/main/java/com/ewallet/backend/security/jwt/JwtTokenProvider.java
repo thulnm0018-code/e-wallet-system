@@ -35,44 +35,46 @@ public class JwtTokenProvider {
     }
 
     public String generateAccessToken(User user) {
-        Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + accessTokenExpiration);
 
-        return Jwts.builder()
-                .setSubject(user.getId().toString())
-                .claim("email", user.getEmail())
-                .claim("role", user.getRole().name())
-                .claim("token_type", "ACCESS")
-                .setIssuer("ewallet")
-                .setAudience("ewallet-client")
-                .setIssuedAt(now)
-                .setExpiration(expiryDate)
-                .signWith(getSigningKey())
-                .compact();
-    }
+    Date now = new Date();
+    Date expiryDate = new Date(now.getTime() + accessTokenExpiration);
+
+    return Jwts.builder()
+            .subject(user.getId().toString())
+            .claim("email", user.getEmail())
+            .claim("role", user.getRole().name())
+            .claim("token_type", "ACCESS")
+            .issuer("ewallet")
+            .audience().add("ewallet-client").and()
+            .issuedAt(now)
+            .expiration(expiryDate)
+            .signWith(getSigningKey())
+            .compact();
+}
 
     public String generateRefreshToken(User user) {
-        Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + refreshTokenExpiration);
 
-        return Jwts.builder()
-                .setSubject(user.getId().toString())
-                .claim("token_type", "REFRESH")
-                .setIssuer("ewallet")
-                .setAudience("ewallet-client")
-                .setIssuedAt(now)
-                .setExpiration(expiryDate)
-                .signWith(getSigningKey())
-                .compact();
-    }
+    Date now = new Date();
+    Date expiryDate = new Date(now.getTime() + refreshTokenExpiration);
+
+    return Jwts.builder()
+            .subject(user.getId().toString())
+            .claim("token_type", "REFRESH")
+            .issuer("ewallet")
+            .audience().add("ewallet-client").and()
+            .issuedAt(now)
+            .expiration(expiryDate)
+            .signWith(getSigningKey())
+            .compact();
+}
 
     public Claims validateToken(String token) {
         try {
-                return Jwts.parser()
-                    .setSigningKey(getSigningKey())
+        return Jwts.parser()
+                    .verifyWith(getSigningKey())
                     .build()
-                    .parseClaimsJws(token)
-                    .getBody();
+                    .parseSignedClaims(token)
+                    .getPayload();
         } catch (SignatureException ex) {
             logger.error("Invalid JWT signature: {}", ex.getMessage());
             throw ex;

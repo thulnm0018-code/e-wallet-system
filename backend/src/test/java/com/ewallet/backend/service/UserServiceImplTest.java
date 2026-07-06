@@ -4,7 +4,7 @@ import com.ewallet.backend.entity.User;
 import com.ewallet.backend.repository.OtpRepository;
 import com.ewallet.backend.repository.UserRepository;
 import com.ewallet.backend.repository.WalletRepository;
-import com.ewallet.backend.security.CurrentUserService;
+import com.ewallet.backend.security.service.CurrentUserService;
 import com.ewallet.backend.service.impl.UserServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

@@ -1,8 +1,6 @@
 package com.ewallet.backend.security.filter;
 
-import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
-import io.github.bucket4j.Refill;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,16 +23,17 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final Map<String, Bucket> cache = new ConcurrentHashMap<>();
 
     private Bucket createNewBucket() {
-        Bandwidth limit = Bandwidth.classic(
-                MAX_REQUESTS,
-                Refill.greedy(MAX_REQUESTS, Duration.ofMinutes(1))
-        );
 
-        return Bucket.builder()
-            .addLimit(limit)
+    return Bucket.builder()
+            .addLimit(limit -> limit
+                    .capacity(MAX_REQUESTS)
+                    .refillGreedy(
+                            MAX_REQUESTS,
+                            Duration.ofMinutes(1)
+                    )
+            )
             .build();
-    }
-
+}
     @Override
     protected void doFilterInternal(
             @NonNull HttpServletRequest request,

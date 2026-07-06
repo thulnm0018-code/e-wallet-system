@@ -4,8 +4,10 @@ interface CustomAxiosRequestConfig extends AxiosRequestConfig {
   _retry?: boolean;
 }
 
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080/api/v1';
+
 const api = axios.create({
-  baseURL: 'http://localhost:8080/api/v1',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -28,7 +30,7 @@ api.interceptors.response.use(
     originalRequest._retry = true;
 
     try {
-      await axios.post('http://localhost:8080/api/v1/auth/refresh', {}, { withCredentials: true });
+      await axios.post(`${API_BASE_URL}/auth/refresh`, {}, { withCredentials: true });
       return api(originalRequest);
     } catch (refreshError) {
       const isGuestPage = ['/login', '/register', '/forgot-password', '/reset-password'].includes(window.location.pathname);

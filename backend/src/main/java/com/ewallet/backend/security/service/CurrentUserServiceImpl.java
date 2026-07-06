@@ -1,4 +1,4 @@
-package com.ewallet.backend.security;
+package com.ewallet.backend.security.service;
 
 import com.ewallet.backend.exception.UnauthorizedException;
 import org.springframework.security.core.context.SecurityContextHolder;

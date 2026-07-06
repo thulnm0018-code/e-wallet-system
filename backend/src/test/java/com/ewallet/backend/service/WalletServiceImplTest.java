@@ -1,11 +1,17 @@
 package com.ewallet.backend.service;
 
-import com.ewallet.backend.exception.NotFoundException;
-import com.ewallet.backend.dto.response.WalletResponse;
+import com.ewallet.backend.dto.request.TransferRequest;
+import com.ewallet.backend.dto.response.TransactionResponse;
+import com.ewallet.backend.entity.Otp;
+import com.ewallet.backend.entity.Transaction;
 import com.ewallet.backend.entity.User;
 import com.ewallet.backend.entity.Wallet;
+import com.ewallet.backend.enums.TransactionStatus;
+import com.ewallet.backend.enums.TransactionType;
 import com.ewallet.backend.enums.UserStatus;
 import com.ewallet.backend.enums.WalletStatus;
+import com.ewallet.backend.exception.BadRequestException;
+import com.ewallet.backend.exception.NotFoundException;
 import com.ewallet.backend.mapper.TransactionMapper;
 import com.ewallet.backend.repository.OtpRepository;
 import com.ewallet.backend.repository.TransactionRepository;
@@ -19,12 +25,21 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -73,11 +88,10 @@ class WalletServiceImplTest {
 
     @Test
     void getMyWalletShouldReturnCurrentUserWalletInfo() {
-
         when(currentUserService.getCurrentUserId()).thenReturn(1L);
         when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.of(testWallet));
 
-        WalletResponse response = walletService.getMyWallet();
+        var response = walletService.getMyWallet();
 
         verify(currentUserService).getCurrentUserId();
         verify(walletRepository).findByUser_Id(1L);
@@ -85,23 +99,242 @@ class WalletServiceImplTest {
         assertEquals(10L, response.getId());
         assertEquals("125.50", response.getBalance().toPlainString());
         assertEquals("ACTIVE", response.getWalletStatus());
-        assertEquals("Test User",response.getName());
+        assertEquals("Test User", response.getName());
         assertEquals("0987654321", response.getPhone());
     }
 
     @Test
     void getMyWalletShouldThrowWhenWalletNotFound() {
+        when(currentUserService.getCurrentUserId()).thenReturn(1L);
+        when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.empty());
 
-    when(currentUserService.getCurrentUserId()).thenReturn(1L);
-    when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.empty());
-
-    NotFoundException exception =assertThrows(
+        NotFoundException exception = assertThrows(
                 NotFoundException.class,
                 () -> walletService.getMyWallet());
 
-    assertEquals("Wallet not found",exception.getMessage());
+        assertEquals("Wallet not found", exception.getMessage());
 
-    verify(currentUserService).getCurrentUserId();
-    verify(walletRepository).findByUser_Id(1L);
-   }
+        verify(currentUserService).getCurrentUserId();
+        verify(walletRepository).findByUser_Id(1L);
+    }
+
+    @SuppressWarnings("null")
+    @Test
+    void transferMoneyShouldSucceed() {
+        User receiverUser = new User();
+        receiverUser.setId(2L);
+        receiverUser.setPhone("0987654322");
+        receiverUser.setName("Receiver User");
+        receiverUser.setUserStatus(UserStatus.ACTIVE);
+
+        Wallet receiverWallet = Wallet.builder()
+                .id(20L)
+                .user(receiverUser)
+                .balance(new BigDecimal("50.00"))
+                .walletStatus(WalletStatus.ACTIVE)
+                .build();
+
+        Otp otp = Otp.builder()
+                .id(1L)
+                .user(testUser)
+                .otpCode("123456")
+                .receiverPhone("+84987654322")
+                .amount(new BigDecimal("25.50"))
+                .verified(false)
+                .expiredAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(currentUserService.getCurrentUserId()).thenReturn(1L);
+        when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.of(testWallet));
+        when(otpRepository.findTopByUserOrderByCreatedAtDesc(testUser)).thenReturn(Optional.of(otp));
+        when(walletRepository.findByUser_Phone("+84987654322")).thenReturn(Optional.of(receiverWallet));
+        when(walletRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(testWallet));
+        when(walletRepository.findByIdForUpdate(20L)).thenReturn(Optional.of(receiverWallet));
+        when(codeGenerator.generate()).thenReturn("TXN-123");
+
+        Transaction savedTransaction = Transaction.builder()
+                .id(100L)
+                .transactionCode("TXN-123")
+                .senderWallet(testWallet)
+                .receiverWallet(receiverWallet)
+                .amount(new BigDecimal("25.50"))
+                .message("Payment")
+                .type(TransactionType.TRANSFER)
+                .status(TransactionStatus.SUCCESS)
+                .build();
+
+        when(transactionRepository.save(any(Transaction.class))).thenReturn(savedTransaction);
+        when(transactionMapper.toResponse(savedTransaction)).thenReturn(TransactionResponse.builder()
+                .id(100L)
+                .transactionCode("TXN-123")
+                .senderPhone("0987654321")
+                .receiverPhone("0987654322")
+                .amount(new BigDecimal("25.50"))
+                .message("Payment")
+                .status(TransactionStatus.SUCCESS)
+                .type(TransactionType.TRANSFER)
+                .build());
+
+        TransferRequest request = TransferRequest.builder()
+                .receiverPhone("0987654322")
+                .amount(new BigDecimal("25.50"))
+                .otpCode("123456")
+                .message("Payment")
+                .build();
+
+        TransactionResponse response = walletService.transferMoney(request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getTransactionCode()).isEqualTo("TXN-123");
+        assertThat(response.getAmount()).isEqualByComparingTo(new BigDecimal("25.50"));
+        assertThat(response.getReceiverPhone()).isEqualTo("0987654322");
+        assertThat(testWallet.getBalance()).isEqualByComparingTo(new BigDecimal("100.00"));
+        assertThat(receiverWallet.getBalance()).isEqualByComparingTo(new BigDecimal("75.50"));
+        verify(walletRepository).saveAll(anyList());
+        verify(transactionRepository).save(any(Transaction.class));
+    }
+
+    @SuppressWarnings("null")
+    @Test
+    void transferMoneyShouldThrowWhenReceiverNotFound() {
+        Otp otp = Otp.builder()
+                .user(testUser)
+                .otpCode("123456")
+                .receiverPhone("+84987654322")
+                .amount(new BigDecimal("25.50"))
+                .verified(false)
+                .expiredAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(currentUserService.getCurrentUserId()).thenReturn(1L);
+        when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.of(testWallet));
+        when(otpRepository.findTopByUserOrderByCreatedAtDesc(testUser)).thenReturn(Optional.of(otp));
+        when(walletRepository.findByUser_Phone("+84987654322")).thenReturn(Optional.empty());
+
+        TransferRequest request = TransferRequest.builder()
+                .receiverPhone("0987654322")
+                .amount(new BigDecimal("25.50"))
+                .otpCode("123456")
+                .message("Payment")
+                .build();
+
+        NotFoundException exception = assertThrows(
+                NotFoundException.class,
+                () -> walletService.transferMoney(request));
+
+        assertEquals("Receiver wallet not found", exception.getMessage());
+        verify(transactionRepository, never()).save(any());
+    }
+
+    @SuppressWarnings("null")
+    @Test
+    void transferMoneyShouldThrowWhenTransferToSelf() {
+        Otp otp = Otp.builder()
+                .user(testUser)
+                .otpCode("123456")
+                .receiverPhone("+84987654321")
+                .amount(new BigDecimal("25.50"))
+                .verified(false)
+                .expiredAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(currentUserService.getCurrentUserId()).thenReturn(1L);
+        when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.of(testWallet));
+        when(otpRepository.findTopByUserOrderByCreatedAtDesc(testUser)).thenReturn(Optional.of(otp));
+        when(walletRepository.findByUser_Phone("+84987654321")).thenReturn(Optional.of(testWallet));
+
+        TransferRequest request = TransferRequest.builder()
+                .receiverPhone("0987654321")
+                .amount(new BigDecimal("25.50"))
+                .otpCode("123456")
+                .message("Payment")
+                .build();
+
+        BadRequestException exception = assertThrows(
+                BadRequestException.class,
+                () -> walletService.transferMoney(request));
+
+        assertEquals("Cannot transfer money to yourself", exception.getMessage());
+        verify(transactionRepository, never()).save(any());
+    }
+
+    @SuppressWarnings("null")
+    @Test
+    void transferMoneyShouldThrowWhenAmountLessThanOrEqualToZero() {
+        when(currentUserService.getCurrentUserId()).thenReturn(1L);
+
+        TransferRequest request = TransferRequest.builder()
+                .receiverPhone("0987654322")
+                .amount(BigDecimal.ZERO)
+                .otpCode("123456")
+                .message("Payment")
+                .build();
+
+        BadRequestException exception = assertThrows(
+                BadRequestException.class,
+                () -> walletService.transferMoney(request));
+
+        assertEquals("Amount must be greater than zero", exception.getMessage());
+        verify(transactionRepository, never()).save(any());
+    }
+
+    @SuppressWarnings("null")
+    @Test
+    void getMyHistoryShouldReturnTransactionList() {
+        when(currentUserService.getCurrentUserId()).thenReturn(1L);
+        when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.of(testWallet));
+
+        Transaction transaction = Transaction.builder()
+                .id(42L)
+                .transactionCode("TXN-42")
+                .senderWallet(testWallet)
+                .amount(new BigDecimal("15.00"))
+                .message("History test")
+                .status(TransactionStatus.SUCCESS)
+                .type(TransactionType.TRANSFER)
+                .build();
+
+        TransactionResponse response = TransactionResponse.builder()
+                .id(42L)
+                .transactionCode("TXN-42")
+                .senderPhone("0987654321")
+                .receiverPhone("0987654322")
+                .amount(new BigDecimal("15.00"))
+                .message("History test")
+                .status(TransactionStatus.SUCCESS)
+                .type(TransactionType.TRANSFER)
+                .build();
+
+        when(transactionRepository.findWalletTransactions(
+                eq(10L),
+                any(),
+                any(),
+                any(),
+                any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(transaction)));
+        when(transactionMapper.toResponse(transaction)).thenReturn(response);
+
+        var history = walletService.getMyHistory(null, null, null, 0, 20);
+
+        assertThat(history).hasSize(1);
+        assertThat(history.get(0).getTransactionCode()).isEqualTo("TXN-42");
+    }
+
+    @SuppressWarnings("null")
+    @Test
+    void getMyHistoryShouldReturnEmptyList() {
+        when(currentUserService.getCurrentUserId()).thenReturn(1L);
+        when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.of(testWallet));
+        when(transactionRepository.findWalletTransactions(
+                eq(10L),
+                any(),
+                any(),
+                any(),
+                any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        var history = walletService.getMyHistory(null, null, null, 0, 20);
+
+        assertThat(history).isEmpty();
+    }
 }
