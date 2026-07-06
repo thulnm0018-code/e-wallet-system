@@ -1,5 +1,6 @@
 package com.ewallet.backend.service;
 
+import com.ewallet.backend.dto.request.DepositRequest;
 import com.ewallet.backend.dto.request.TransferRequest;
 import com.ewallet.backend.dto.response.TransactionResponse;
 import com.ewallet.backend.entity.Otp;
@@ -108,18 +109,15 @@ class WalletServiceImplTest {
         when(currentUserService.getCurrentUserId()).thenReturn(1L);
         when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.empty());
 
-        NotFoundException exception = assertThrows(
-                NotFoundException.class,
-                () -> walletService.getMyWallet());
+        NotFoundException exception = assertThrows(NotFoundException.class, () -> walletService.getMyWallet());
 
         assertEquals("Wallet not found", exception.getMessage());
-
         verify(currentUserService).getCurrentUserId();
         verify(walletRepository).findByUser_Id(1L);
     }
 
     @SuppressWarnings("null")
-    @Test
+@Test
     void transferMoneyShouldSucceed() {
         User receiverUser = new User();
         receiverUser.setId(2L);
@@ -195,7 +193,7 @@ class WalletServiceImplTest {
     }
 
     @SuppressWarnings("null")
-    @Test
+@Test
     void transferMoneyShouldThrowWhenReceiverNotFound() {
         Otp otp = Otp.builder()
                 .user(testUser)
@@ -218,16 +216,14 @@ class WalletServiceImplTest {
                 .message("Payment")
                 .build();
 
-        NotFoundException exception = assertThrows(
-                NotFoundException.class,
-                () -> walletService.transferMoney(request));
+        NotFoundException exception = assertThrows(NotFoundException.class, () -> walletService.transferMoney(request));
 
         assertEquals("Receiver wallet not found", exception.getMessage());
         verify(transactionRepository, never()).save(any());
     }
 
     @SuppressWarnings("null")
-    @Test
+@Test
     void transferMoneyShouldThrowWhenTransferToSelf() {
         Otp otp = Otp.builder()
                 .user(testUser)
@@ -250,16 +246,43 @@ class WalletServiceImplTest {
                 .message("Payment")
                 .build();
 
-        BadRequestException exception = assertThrows(
-                BadRequestException.class,
-                () -> walletService.transferMoney(request));
+        BadRequestException exception = assertThrows(BadRequestException.class, () -> walletService.transferMoney(request));
 
         assertEquals("Cannot transfer money to yourself", exception.getMessage());
         verify(transactionRepository, never()).save(any());
     }
 
     @SuppressWarnings("null")
-    @Test
+@Test
+    void transferMoneyShouldThrowWhenOtpIsExpired() {
+        Otp otp = Otp.builder()
+                .user(testUser)
+                .otpCode("123456")
+                .receiverPhone("+84987654322")
+                .amount(new BigDecimal("25.50"))
+                .verified(false)
+                .expiredAt(LocalDateTime.now().minusMinutes(1))
+                .build();
+
+        when(currentUserService.getCurrentUserId()).thenReturn(1L);
+        when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.of(testWallet));
+        when(otpRepository.findTopByUserOrderByCreatedAtDesc(testUser)).thenReturn(Optional.of(otp));
+
+        TransferRequest request = TransferRequest.builder()
+                .receiverPhone("0987654322")
+                .amount(new BigDecimal("25.50"))
+                .otpCode("123456")
+                .message("Payment")
+                .build();
+
+        BadRequestException exception = assertThrows(BadRequestException.class, () -> walletService.transferMoney(request));
+
+        assertEquals("OTP expired", exception.getMessage());
+        verify(transactionRepository, never()).save(any());
+    }
+
+    @SuppressWarnings("null")
+@Test
     void transferMoneyShouldThrowWhenAmountLessThanOrEqualToZero() {
         when(currentUserService.getCurrentUserId()).thenReturn(1L);
 
@@ -270,16 +293,153 @@ class WalletServiceImplTest {
                 .message("Payment")
                 .build();
 
-        BadRequestException exception = assertThrows(
-                BadRequestException.class,
-                () -> walletService.transferMoney(request));
+        BadRequestException exception = assertThrows(BadRequestException.class, () -> walletService.transferMoney(request));
 
         assertEquals("Amount must be greater than zero", exception.getMessage());
         verify(transactionRepository, never()).save(any());
     }
 
-    @SuppressWarnings("null")
     @Test
+    void transferMoneyShouldThrowWhenOtpInvalid() {
+        Otp otp = Otp.builder()
+                .user(testUser)
+                .otpCode("654321")
+                .receiverPhone("+84987654322")
+                .amount(new BigDecimal("25.50"))
+                .verified(false)
+                .expiredAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(currentUserService.getCurrentUserId()).thenReturn(1L);
+        when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.of(testWallet));
+        when(otpRepository.findTopByUserOrderByCreatedAtDesc(testUser)).thenReturn(Optional.of(otp));
+
+        TransferRequest request = TransferRequest.builder()
+                .receiverPhone("0987654322")
+                .amount(new BigDecimal("25.50"))
+                .otpCode("123456")
+                .message("Payment")
+                .build();
+
+        BadRequestException exception = assertThrows(BadRequestException.class, () -> walletService.transferMoney(request));
+
+        assertEquals("Invalid OTP", exception.getMessage());
+        verify(transactionRepository, never()).save(any());
+    }
+
+    @Test
+    void transferMoneyShouldThrowWhenInsufficientBalance() {
+        Otp otp = Otp.builder()
+                .user(testUser)
+                .otpCode("123456")
+                .receiverPhone("+84987654322")
+                .amount(new BigDecimal("200.00"))
+                .verified(false)
+                .expiredAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        User receiverUser = new User();
+        receiverUser.setId(2L);
+        receiverUser.setPhone("0987654322");
+        receiverUser.setUserStatus(UserStatus.ACTIVE);
+
+        Wallet receiverWallet = Wallet.builder()
+                .id(20L)
+                .user(receiverUser)
+                .balance(new BigDecimal("50.00"))
+                .walletStatus(WalletStatus.ACTIVE)
+                .build();
+
+        when(currentUserService.getCurrentUserId()).thenReturn(1L);
+        when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.of(testWallet));
+        when(otpRepository.findTopByUserOrderByCreatedAtDesc(testUser)).thenReturn(Optional.of(otp));
+        when(walletRepository.findByUser_Phone("+84987654322")).thenReturn(Optional.of(receiverWallet));
+        when(walletRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(testWallet));
+        when(walletRepository.findByIdForUpdate(20L)).thenReturn(Optional.of(receiverWallet));
+
+        TransferRequest request = TransferRequest.builder()
+                .receiverPhone("0987654322")
+                .amount(new BigDecimal("200.00"))
+                .otpCode("123456")
+                .message("Payment")
+                .build();
+
+        BadRequestException exception = assertThrows(BadRequestException.class, () -> walletService.transferMoney(request));
+
+        assertEquals("Insufficient balance", exception.getMessage());
+        verify(transactionRepository, never()).save(any());
+    }
+
+    @Test
+    void transferMoneyShouldThrowWhenOtpAlreadyUsed() {
+        Otp otp = Otp.builder()
+                .user(testUser)
+                .otpCode("123456")
+                .receiverPhone("+84987654322")
+                .amount(new BigDecimal("25.50"))
+                .verified(true)
+                .expiredAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(currentUserService.getCurrentUserId()).thenReturn(1L);
+        when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.of(testWallet));
+        when(otpRepository.findTopByUserOrderByCreatedAtDesc(testUser)).thenReturn(Optional.of(otp));
+
+        TransferRequest request = TransferRequest.builder()
+                .receiverPhone("0987654322")
+                .amount(new BigDecimal("25.50"))
+                .otpCode("123456")
+                .message("Payment")
+                .build();
+
+        BadRequestException exception = assertThrows(BadRequestException.class, () -> walletService.transferMoney(request));
+
+        assertEquals("OTP already used", exception.getMessage());
+        verify(transactionRepository, never()).save(any());
+    }
+
+    @SuppressWarnings("null")
+@Test
+    void depositMoneyShouldIncreaseBalanceAndCreateTransaction() {
+        when(currentUserService.getCurrentUserId()).thenReturn(1L);
+        when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.of(testWallet));
+        when(walletRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(testWallet));
+        when(codeGenerator.generate()).thenReturn("DEP-001");
+
+        Transaction savedTransaction = Transaction.builder()
+                .id(200L)
+                .transactionCode("DEP-001")
+                .receiverWallet(testWallet)
+                .amount(new BigDecimal("50.00"))
+                .message("Deposit")
+                .type(TransactionType.DEPOSIT)
+                .status(TransactionStatus.SUCCESS)
+                .build();
+
+        when(transactionRepository.save(any(Transaction.class))).thenReturn(savedTransaction);
+        when(transactionMapper.toResponse(savedTransaction)).thenReturn(TransactionResponse.builder()
+                .id(200L)
+                .transactionCode("DEP-001")
+                .amount(new BigDecimal("50.00"))
+                .message("Deposit")
+                .status(TransactionStatus.SUCCESS)
+                .type(TransactionType.DEPOSIT)
+                .build());
+
+        DepositRequest request = new DepositRequest();
+        request.setAmount(new BigDecimal("50.00"));
+        request.setMessage("Deposit");
+
+        TransactionResponse response = walletService.depositMoney(request);
+
+        assertThat(response.getTransactionCode()).isEqualTo("DEP-001");
+        assertThat(testWallet.getBalance()).isEqualByComparingTo(new BigDecimal("175.50"));
+        verify(walletRepository).save(testWallet);
+        verify(transactionRepository).save(any(Transaction.class));
+    }
+
+    @SuppressWarnings("null")
+@Test
     void getMyHistoryShouldReturnTransactionList() {
         when(currentUserService.getCurrentUserId()).thenReturn(1L);
         when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.of(testWallet));
@@ -305,12 +465,7 @@ class WalletServiceImplTest {
                 .type(TransactionType.TRANSFER)
                 .build();
 
-        when(transactionRepository.findWalletTransactions(
-                eq(10L),
-                any(),
-                any(),
-                any(),
-                any(Pageable.class)))
+        when(transactionRepository.findWalletTransactions(eq(10L), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(transaction)));
         when(transactionMapper.toResponse(transaction)).thenReturn(response);
 
@@ -321,16 +476,11 @@ class WalletServiceImplTest {
     }
 
     @SuppressWarnings("null")
-    @Test
+@Test
     void getMyHistoryShouldReturnEmptyList() {
         when(currentUserService.getCurrentUserId()).thenReturn(1L);
         when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.of(testWallet));
-        when(transactionRepository.findWalletTransactions(
-                eq(10L),
-                any(),
-                any(),
-                any(),
-                any(Pageable.class)))
+        when(transactionRepository.findWalletTransactions(eq(10L), any(), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
 
         var history = walletService.getMyHistory(null, null, null, 0, 20);
