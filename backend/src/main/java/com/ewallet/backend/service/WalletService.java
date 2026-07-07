@@ -23,4 +23,5 @@ public interface WalletService {
     WalletResponse getMyWallet();
     List<TransactionResponse> getMyHistory(String type, String startDate, String endDate);
     List<TransactionResponse> getMyHistory(String type, String startDate, String endDate, Integer page, Integer size);
+    TransactionResponse getTransactionDetail(Long id);
 }

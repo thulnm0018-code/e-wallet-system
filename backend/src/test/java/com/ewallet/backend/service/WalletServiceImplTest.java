@@ -299,7 +299,8 @@ class WalletServiceImplTest {
         verify(transactionRepository, never()).save(any());
     }
 
-    @Test
+    @SuppressWarnings("null")
+@Test
     void transferMoneyShouldThrowWhenOtpInvalid() {
         Otp otp = Otp.builder()
                 .user(testUser)
@@ -327,7 +328,8 @@ class WalletServiceImplTest {
         verify(transactionRepository, never()).save(any());
     }
 
-    @Test
+    @SuppressWarnings("null")
+@Test
     void transferMoneyShouldThrowWhenInsufficientBalance() {
         Otp otp = Otp.builder()
                 .user(testUser)
@@ -370,7 +372,8 @@ class WalletServiceImplTest {
         verify(transactionRepository, never()).save(any());
     }
 
-    @Test
+    @SuppressWarnings("null")
+@Test
     void transferMoneyShouldThrowWhenOtpAlreadyUsed() {
         Otp otp = Otp.builder()
                 .user(testUser)

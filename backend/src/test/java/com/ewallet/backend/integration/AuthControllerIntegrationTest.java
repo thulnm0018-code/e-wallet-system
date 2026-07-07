@@ -85,9 +85,12 @@ class AuthControllerIntegrationTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Login successful"))
+                .andExpect(jsonPath("$.data.expiresIn").isNumber())
+                .andExpect(jsonPath("$.data.user").exists())
                 .andExpect(jsonPath("$.data.user.email").value("bob@example.com"));
     }
 
+    @SuppressWarnings("null")
     @Test
     void register_shouldReturnConflictWhenEmailAlreadyExists() throws Exception {
         User existing = new User();
@@ -112,6 +115,7 @@ class AuthControllerIntegrationTest {
                 .andExpect(jsonPath("$.message").value("Email already registered"));
     }
 
+    @SuppressWarnings("null")
     @Test
     void login_shouldReturnUnauthorizedWhenPasswordIsWrong() throws Exception {
         User user = new User();

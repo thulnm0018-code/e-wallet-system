@@ -15,6 +15,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(classes = BackendApplication.class)
@@ -55,7 +57,9 @@ class JwtAuthenticationIntegrationTest {
     void protectedEndpoint_shouldBeAccessibleWithJwt() throws Exception {
         mockMvc.perform(get("/api/v1/auth/me")
                         .header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.email")
+                .value("jwt@example.com"));
     }
 
     @Test
@@ -70,4 +74,34 @@ class JwtAuthenticationIntegrationTest {
                         .header("Authorization", "Bearer invalid-token"))
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+void currentUser_shouldReturnAuthenticatedUser()
+        throws Exception {
+
+    mockMvc.perform(get("/api/v1/auth/me")
+            .header(
+                "Authorization",
+                "Bearer " + token
+            ))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.message")
+                    .value("Fetch user session successful"))
+            .andExpect(jsonPath("$.data.email")
+                    .value("jwt@example.com"));
+}
+
+    @Test
+void logout_shouldReturnSuccess()
+        throws Exception {
+
+    mockMvc.perform(post("/api/v1/auth/logout")
+            .header(
+                "Authorization",
+                "Bearer " + token
+            ))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.message")
+                    .value("Logged out successfully"));
+}
 }

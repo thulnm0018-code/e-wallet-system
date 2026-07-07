@@ -30,6 +30,7 @@ import com.ewallet.backend.util.TransactionCodeGenerator;
 import com.ewallet.backend.util.OtpUtils;
 import com.ewallet.backend.exception.NotFoundException;
 import com.ewallet.backend.exception.BadRequestException;
+import com.ewallet.backend.exception.ForbiddenException;
 import com.ewallet.backend.exception.AccountInactiveException;
 import com.ewallet.backend.mapper.TransactionMapper;
 import org.springframework.stereotype.Service;
@@ -42,6 +43,7 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
@@ -54,6 +56,12 @@ public class WalletServiceImpl implements WalletService {
     private final CurrentUserService currentUserService;
     private final TransactionMapper transactionMapper;
     private final OtpRepository otpRepository;
+
+    private static final BigDecimal MIN_TRANSFER_AMOUNT =new BigDecimal("1.00");
+    private static final BigDecimal MAX_TRANSFER_AMOUNT =new BigDecimal("5000.00");
+
+    private final ConcurrentHashMap<String, Boolean>processingTransfers = new ConcurrentHashMap<>();
+
 
     public WalletServiceImpl(
             WalletRepository walletRepository,
@@ -80,6 +88,7 @@ public class WalletServiceImpl implements WalletService {
         log.info("[TRANSFER-INITIATE] START - UserId: {}", senderUserId);
 
         validateAmount(request.getAmount());
+        validateTransferLimits(request.getAmount());
 
         String receiverPhone = PhoneUtils.normalize(request.getReceiverPhone());
         if (receiverPhone == null) {
@@ -157,7 +166,16 @@ public class WalletServiceImpl implements WalletService {
         Long senderUserId = currentUserService.getCurrentUserId();
 
         validateAmount(request.getAmount());
+        validateTransferLimits(request.getAmount());
 
+        String transferKey = senderUserId + "-" + request.getAmount() + "-" + request.getReceiverPhone();
+
+        if (processingTransfers.putIfAbsent(transferKey,Boolean.TRUE) != null) {
+
+        throw new ResourceConflictException("Transfer already being processed");
+}
+
+try {
         // Validate OTP
         if (request.getOtpCode() == null || request.getOtpCode().isBlank()) {
             throw new BadRequestException("OTP code is required");
@@ -267,6 +285,13 @@ public class WalletServiceImpl implements WalletService {
 
         return transactionMapper.toResponse(savedTransaction);
     }
+    
+finally {
+
+        processingTransfers.remove(
+                transferKey);
+    }
+}
 
     @Override
     @Transactional
@@ -436,6 +461,24 @@ public class WalletServiceImpl implements WalletService {
         }
     }
 
+        private void validateTransferLimits(
+        BigDecimal amount) {
+
+    if (amount.compareTo(
+            MIN_TRANSFER_AMOUNT) < 0) {
+
+        throw new BadRequestException(
+                "Transfer amount is below minimum limit");
+    }
+
+    if (amount.compareTo(
+            MAX_TRANSFER_AMOUNT) > 0) {
+
+        throw new BadRequestException(
+                "Transfer amount exceeds maximum limit");
+    }
+}
+
     private Wallet getWalletByUserId(Long userId) {
         return walletRepository.findByUser_Id(userId)
                 .orElseThrow(() -> new NotFoundException("Wallet not found"));
@@ -493,4 +536,34 @@ private Wallet lockWallet(Long walletId) {
                         "Wallet is currently being processed. Please try again later.");}
         }
 
+        @Override
+@Transactional(readOnly = true)
+public TransactionResponse getTransactionDetail(Long id) {
+
+    Long currentUserId = currentUserService.getCurrentUserId();
+
+    @SuppressWarnings("null")
+    Transaction transaction = transactionRepository.findById(id)
+            .orElseThrow(() ->
+                    new NotFoundException("Transaction not found"));
+
+    boolean sender = transaction.getSenderWallet() != null
+            && transaction.getSenderWallet()
+            .getUser()
+            .getId()
+            .equals(currentUserId);
+
+    boolean receiver = transaction.getReceiverWallet() != null
+            && transaction.getReceiverWallet()
+            .getUser()
+            .getId()
+            .equals(currentUserId);
+
+    if (!sender && !receiver) {
+        throw new ForbiddenException(
+                "You are not authorized to view this transaction");
+    }
+
+    return transactionMapper.toResponse(transaction);
+}
 }

@@ -105,6 +105,7 @@ class UserServiceImplTest {
         verify(otpRepository, never()).save(any());
     }
 
+    @SuppressWarnings("null")
     @Test
     void registerUser_shouldThrowConflictWhenPhoneExists() {
         UserCreateRequest request = new UserCreateRequest();
@@ -122,6 +123,7 @@ class UserServiceImplTest {
         verify(otpRepository, never()).save(any());
     }
 
+    @SuppressWarnings("null")
     @Test
     void changePassword_shouldThrowWhenUserNotFound() {
         when(currentUserService.getCurrentUserId()).thenReturn(99L);
