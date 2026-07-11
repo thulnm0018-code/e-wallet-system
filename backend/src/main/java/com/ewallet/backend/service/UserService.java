@@ -7,10 +7,13 @@ import com.ewallet.backend.dto.request.UserCreateRequest;
 import com.ewallet.backend.dto.response.AdminDashboardResponse;
 import com.ewallet.backend.dto.response.AdminTransactionResponse;
 import com.ewallet.backend.dto.response.AdminUserResponse;
+import com.ewallet.backend.dto.response.AvatarResponse;
 import com.ewallet.backend.dto.response.ReceiverLookupResponse;
 import com.ewallet.backend.dto.response.UserResponse;
 
 import java.util.List;
+
+import org.springframework.web.multipart.MultipartFile;
 
 public interface UserService {
 
@@ -31,4 +34,11 @@ public interface UserService {
     List<AdminTransactionResponse> getAdminTransactions();
 
     AdminDashboardResponse getAdminDashboard();
+
+    void lockUser(Long id);
+    void unlockUser(Long id);
+
+    AvatarResponse uploadAvatar(MultipartFile file);
+
+    void deleteUser (Long id);
 }

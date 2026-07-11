@@ -6,12 +6,15 @@ import com.ewallet.backend.dto.response.AdminDashboardResponse;
 import com.ewallet.backend.dto.response.AdminTransactionResponse;
 import com.ewallet.backend.dto.response.AdminUserResponse;
 import com.ewallet.backend.dto.response.ApiResponse;
+import com.ewallet.backend.dto.response.AvatarResponse;
 import com.ewallet.backend.dto.response.ReceiverLookupResponse;
 import com.ewallet.backend.dto.response.UserResponse;
 import com.ewallet.backend.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -87,4 +90,65 @@ public class UserController {
                         .build()
         );
     }
+
+    @PostMapping("/avatar")
+public ResponseEntity<ApiResponse<AvatarResponse>>
+uploadAvatar(
+        @RequestParam("file")
+        MultipartFile file) {
+
+    AvatarResponse response =
+            userService.uploadAvatar(file);
+
+    return ResponseEntity.ok(
+            ApiResponse.<AvatarResponse>builder()
+                    .message(
+                            "Avatar uploaded successfully")
+                    .data(response)
+                    .build()
+    );
+}
+
+    @PreAuthorize("hasRole('ADMIN')")
+@PutMapping("/admin/users/{id}/lock")
+public ResponseEntity<ApiResponse<?>> lockUser(
+        @PathVariable Long id) {
+
+    userService.lockUser(id);
+
+    return ResponseEntity.ok(
+            ApiResponse.builder()
+                    .message("User locked successfully")
+                    .build()
+    );
+}
+
+@PreAuthorize("hasRole('ADMIN')")
+@PutMapping("/admin/users/{id}/unlock")
+public ResponseEntity<ApiResponse<?>> unlockUser(
+        @PathVariable Long id) {
+
+    userService.unlockUser(id);
+
+    return ResponseEntity.ok(
+            ApiResponse.builder()
+                    .message("User unlocked successfully")
+                    .build()
+    );
+}
+
+@DeleteMapping("/admin/users/{id}")
+@PreAuthorize("hasRole('ADMIN')")
+public ResponseEntity<ApiResponse<Void>> deleteUser(
+        @PathVariable Long id) {
+
+    userService.deleteUser(id);
+
+    return ResponseEntity.ok(
+            ApiResponse.<Void>builder()
+                    .message("User deleted successfully")
+                    .build()
+    );
+}
+
 }

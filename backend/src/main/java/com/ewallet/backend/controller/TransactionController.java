@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PathVariable;
 
 import java.util.List;
 
@@ -36,4 +37,16 @@ public class TransactionController {
                         .build()
         );
     }
+
+    @GetMapping("/{id}")
+public ResponseEntity<ApiResponse<TransactionResponse>>
+getTransactionDetail(@PathVariable Long id) {
+
+    return ResponseEntity.ok(
+            ApiResponse.<TransactionResponse>builder()
+                    .message("Fetch transaction detail successful")
+                    .data(walletService.getTransactionDetail(id))
+                    .build()
+    );
+}
 }

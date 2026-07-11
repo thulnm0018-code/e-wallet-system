@@ -95,8 +95,8 @@ class UserServiceImplTest {
         request.setPhone("0987654321");
         request.setPassword("StrongPass123");
 
-        when(userRepository.existsByPhone("+84987654321")).thenReturn(false);
-        when(userRepository.existsByEmail("jane@example.com")).thenReturn(true);
+        when(userRepository.existsByPhoneAndDeletedFalse("+84987654321")).thenReturn(false);
+        when(userRepository.existsByEmailAndDeletedFalse("jane@example.com")).thenReturn(true);
 
         ResourceConflictException exception = assertThrows(ResourceConflictException.class,
                 () -> userService.registerUser(request));
@@ -114,7 +114,7 @@ class UserServiceImplTest {
         request.setPhone("0987654321");
         request.setPassword("StrongPass123");
 
-        when(userRepository.existsByPhone("+84987654321")).thenReturn(true);
+        when(userRepository.existsByPhoneAndDeletedFalse("+84987654321")).thenReturn(true);
 
         ResourceConflictException exception = assertThrows(ResourceConflictException.class,
                 () -> userService.registerUser(request));

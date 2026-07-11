@@ -60,7 +60,7 @@ class AuthControllerIntegrationTest {
                 .andExpect(jsonPath("$.message").value("Registration successful. Please verify OTP."))
                 .andExpect(jsonPath("$.data.id").value(notNullValue()));
 
-        User savedUser = userRepository.findByEmail("alice@example.com").orElseThrow();
+        User savedUser = userRepository.findByEmailAndDeletedFalse("alice@example.com").orElseThrow();
         assert savedUser.getPasswordHash() != null;
     }
 

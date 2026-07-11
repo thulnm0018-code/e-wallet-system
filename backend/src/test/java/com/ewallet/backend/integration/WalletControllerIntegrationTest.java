@@ -131,7 +131,7 @@ class WalletControllerIntegrationTest {
     @SuppressWarnings("null")
     @Test
     void transfer_shouldReturnSuccessForValidOtp() throws Exception {
-        User sender = userRepository.findByEmail("sender@example.com").orElseThrow();
+        User sender = userRepository.findByEmailAndDeletedFalse("sender@example.com").orElseThrow();
         Otp otp = Otp.builder()
                 .user(sender)
                 .otpCode("123456")

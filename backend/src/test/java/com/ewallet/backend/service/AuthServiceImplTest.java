@@ -70,7 +70,7 @@ class AuthServiceImplTest {
         req.setIdentifier("alice@example.com");
         req.setPassword("secret");
 
-        when(userRepository.findByEmail("alice@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.findByEmailAndDeletedFalse("alice@example.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("secret", "hashed")).thenReturn(true);
         when(jwtTokenProvider.generateAccessToken(any())).thenReturn("access-token");
         when(jwtTokenProvider.generateRefreshToken(any())).thenReturn("refresh-token");
@@ -85,7 +85,7 @@ class AuthServiceImplTest {
 
         LoginResponse resp = authService.login(req, response);
 
-        verify(userRepository).findByEmail("alice@example.com");
+        verify(userRepository).findByEmailAndDeletedFalse("alice@example.com");
         verify(passwordEncoder).matches("secret", "hashed");
         verify(jwtTokenProvider).generateAccessToken(user);
         verify(jwtTokenProvider).generateRefreshToken(user);
@@ -109,7 +109,7 @@ class AuthServiceImplTest {
         req.setIdentifier("0987654321");
         req.setPassword("secret");
 
-        when(userRepository.findByPhone("+84987654321")).thenReturn(Optional.of(user));
+        when(userRepository.findByPhoneAndDeletedFalse("+84987654321")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("secret", "hashed")).thenReturn(true);
         when(jwtTokenProvider.generateAccessToken(any())).thenReturn("access-token");
         when(jwtTokenProvider.generateRefreshToken(any())).thenReturn("refresh-token");
@@ -118,7 +118,7 @@ class AuthServiceImplTest {
 
         assertThat(resp).isNotNull();
         assertThat(resp.getUser()).isNotNull();
-        verify(userRepository).findByPhone("+84987654321");
+        verify(userRepository).findByPhoneAndDeletedFalse("+84987654321");
     }
 
     @Test
@@ -127,7 +127,7 @@ class AuthServiceImplTest {
         req.setIdentifier("bob@example.com");
         req.setPassword("nope");
 
-        when(userRepository.findByEmail("bob@example.com")).thenReturn(Optional.empty());
+        when(userRepository.findByEmailAndDeletedFalse("bob@example.com")).thenReturn(Optional.empty());
 
         Assertions.assertThrows(UnauthorizedException.class, () -> authService.login(req, response));
     }
@@ -144,12 +144,12 @@ class AuthServiceImplTest {
         req.setIdentifier("charlie@example.com");
         req.setPassword("wrong-pass");
 
-        when(userRepository.findByEmail("charlie@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.findByEmailAndDeletedFalse("charlie@example.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("wrong-pass", "hashed")).thenReturn(false);
 
         Assertions.assertThrows(UnauthorizedException.class, () -> authService.login(req, response));
 
-        verify(userRepository).findByEmail("charlie@example.com");
+        verify(userRepository).findByEmailAndDeletedFalse("charlie@example.com");
         verify(passwordEncoder).matches("wrong-pass", "hashed");
     }
 
@@ -165,11 +165,11 @@ class AuthServiceImplTest {
         req.setIdentifier("dave@example.com");
         req.setPassword("secret");
 
-        when(userRepository.findByEmail("dave@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.findByEmailAndDeletedFalse("dave@example.com")).thenReturn(Optional.of(user));
 
         Assertions.assertThrows(UnauthorizedException.class, () -> authService.login(req, response));
 
-        verify(userRepository).findByEmail("dave@example.com");
+        verify(userRepository).findByEmailAndDeletedFalse("dave@example.com");
         verify(passwordEncoder, never()).matches(any(), any());
     }
 

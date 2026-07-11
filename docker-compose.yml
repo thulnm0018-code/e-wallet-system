@@ -56,6 +56,8 @@ services:
     ports:
       - "8080:8080"
 
+    volumes:
+      - ./backend/uploads/avatars:/app/uploads/avatars
   frontend:
     build:
       context: ./frontend

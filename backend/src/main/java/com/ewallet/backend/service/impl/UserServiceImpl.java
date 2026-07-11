@@ -7,6 +7,7 @@ import com.ewallet.backend.dto.request.UserCreateRequest;
 import com.ewallet.backend.dto.response.AdminDashboardResponse;
 import com.ewallet.backend.dto.response.AdminTransactionResponse;
 import com.ewallet.backend.dto.response.AdminUserResponse;
+import com.ewallet.backend.dto.response.AvatarResponse;
 import com.ewallet.backend.dto.response.ReceiverLookupResponse;
 import com.ewallet.backend.dto.response.UserResponse;
 import com.ewallet.backend.entity.Otp;
@@ -15,6 +16,7 @@ import com.ewallet.backend.entity.User;
 import com.ewallet.backend.entity.Wallet;
 import com.ewallet.backend.enums.TransactionStatus;
 import com.ewallet.backend.enums.UserStatus;
+import com.ewallet.backend.enums.WalletStatus;
 import com.ewallet.backend.exception.BadRequestException;
 import com.ewallet.backend.exception.NotFoundException;
 import com.ewallet.backend.exception.ResourceConflictException;
@@ -26,18 +28,31 @@ import com.ewallet.backend.security.service.CurrentUserService;
 import com.ewallet.backend.service.UserService;
 import com.ewallet.backend.util.OtpUtils;
 import com.ewallet.backend.util.PhoneUtils;
+
 import jakarta.transaction.Transactional;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.Locale;
-import org.springframework.util.StringUtils;
+
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.io.IOException;
 
 @Service
 public class UserServiceImpl implements UserService {
@@ -48,6 +63,7 @@ public class UserServiceImpl implements UserService {
     private final WalletRepository walletRepository;
     private final TransactionRepository transactionRepository;
     private final CurrentUserService currentUserService;
+    private final Path avatarRootLocation;
 
     private static final Logger log = LoggerFactory.getLogger(UserServiceImpl.class);
 
@@ -56,14 +72,67 @@ public class UserServiceImpl implements UserService {
                            OtpRepository otpRepository,
                            WalletRepository walletRepository,
                            TransactionRepository transactionRepository,
-                           CurrentUserService currentUserService) {
+                           CurrentUserService currentUserService,
+                            @Value("${app.upload.dir}") String uploadDir) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.otpRepository = otpRepository;
         this.walletRepository = walletRepository;
         this.transactionRepository = transactionRepository;
         this.currentUserService = currentUserService;
-    }
+        this.avatarRootLocation = Paths.get(uploadDir);
+
+    try {
+            Files.createDirectories(this.avatarRootLocation);
+} catch (IOException e) {
+    throw new RuntimeException(
+            "Could not initialize avatar storage",
+            e
+    );
+}
+}                          
+
+    @Override
+@Transactional
+public void lockUser(Long id) {
+
+    User user = userRepository.findByIdAndDeletedFalse(id)
+            .orElseThrow(() ->
+                    new NotFoundException("User not found"));
+
+    user.setUserStatus(UserStatus.LOCKED);
+
+    Wallet wallet = walletRepository
+            .findByUser_Id(user.getId())
+            .orElseThrow(() ->
+                    new NotFoundException("Wallet not found"));
+
+    wallet.setWalletStatus(WalletStatus.FROZEN);
+
+    walletRepository.save(wallet);
+    userRepository.save(user);
+}  
+ 
+    @Override
+@Transactional
+public void unlockUser(Long id) {
+
+    User user = userRepository.findByIdAndDeletedFalse(id)
+            .orElseThrow(() ->
+                    new NotFoundException("User not found"));
+
+    user.setUserStatus(UserStatus.ACTIVE);
+
+    Wallet wallet = walletRepository
+            .findByUser_Id(user.getId())
+            .orElseThrow(() ->
+                    new NotFoundException("Wallet not found"));
+
+    wallet.setWalletStatus(WalletStatus.ACTIVE);
+
+    walletRepository.save(wallet);
+    userRepository.save(user);
+}
 
     @Override
     @Transactional
@@ -80,10 +149,10 @@ public class UserServiceImpl implements UserService {
             throw new IllegalArgumentException("Invalid phone number format or unsupported country code");
         }
 
-        if (userRepository.existsByPhone(phone)) {
+        if (userRepository.existsByPhoneAndDeletedFalse(phone)) {
             throw new ResourceConflictException("Phone number already registered");
         }
-        if (userRepository.existsByEmail(email)) {
+        if (userRepository.existsByEmailAndDeletedFalse(email)) {
             throw new ResourceConflictException("Email already registered");
         }
 
@@ -124,7 +193,7 @@ public class UserServiceImpl implements UserService {
         if (cleanPhone == null) {
             throw new IllegalArgumentException("Invalid phone number format");
         }
-        User user = userRepository.findByPhone(cleanPhone)
+        User user = userRepository.findByPhoneAndDeletedFalse(cleanPhone)
                 .orElseThrow(() -> new NotFoundException("User not found with phone: " + phone));
 
         Wallet wallet = walletRepository.findByUser_Id(user.getId())
@@ -197,7 +266,7 @@ Long userId = Objects.requireNonNull(
         "Current user id is null"
 );
 
-User user = userRepository.findById(userId)
+User user = userRepository.findByIdAndDeletedFalse(userId)
         .orElseThrow(() -> new NotFoundException("User not found"));
         String normalizedCurrentPassword = currentPassword == null ? "" : currentPassword;
         String normalizedNewPassword = newPassword == null ? "" : newPassword;
@@ -224,7 +293,7 @@ User user = userRepository.findById(userId)
         Long userId = Objects.requireNonNull(
         currentUserService.getCurrentUserId(),"Current user id is null");
 
-        User user = userRepository.findById(userId)
+        User user = userRepository.findByIdAndDeletedFalse(userId)
         .orElseThrow(() -> new NotFoundException("User not found"));
 
 
@@ -236,12 +305,19 @@ User user = userRepository.findById(userId)
             throw new BadRequestException("Invalid phone number format");
         }
 
-        if (!email.equals(user.getEmail()) && userRepository.existsByEmail(email)) {
-            throw new ResourceConflictException("Email already registered");
-        }
-        if (!phone.equals(user.getPhone()) && userRepository.existsByPhone(phone)) {
-            throw new ResourceConflictException("Phone already registered");
-        }
+        if (!email.equals(user.getEmail())
+        && userRepository.existsByEmailAndDeletedFalse(email)) {
+
+        throw new ResourceConflictException(
+            "Email already registered");
+}
+        if (!phone.equals(user.getPhone())
+        && userRepository.existsByPhoneAndDeletedFalse(phone)) {
+
+        throw new ResourceConflictException(
+            "Phone already registered");
+}
+
 
         user.setName(name);
         user.setEmail(email);
@@ -252,7 +328,8 @@ User user = userRepository.findById(userId)
 
     @Override
     public List<AdminUserResponse> getAdminUsers() {
-        return userRepository.findAll().stream()
+        return userRepository.findByDeletedFalse()
+                .stream()
                 .map(user -> {
                     Wallet wallet = walletRepository.findByUser_Id(user.getId()).orElse(null);
                     return AdminUserResponse.fromEntity(user, wallet != null ? wallet.getBalance() : BigDecimal.ZERO);
@@ -283,7 +360,7 @@ User user = userRepository.findById(userId)
 
 
         return AdminDashboardResponse.builder()
-                .totalUsers(userRepository.count())
+                .totalUsers(userRepository.countByDeletedFalse())
                 .activeWallets(walletRepository.count())
                 .totalVolume(totalVolume)
                 .pendingReviews(pendingReviews)
@@ -294,17 +371,21 @@ User user = userRepository.findById(userId)
         String normalizedIdentifier = normalizeIdentifier(identifier);
 
         if (normalizedIdentifier.matches("^[A-Za-z0-9+_.-]+@(.+)$")) {
-            return userRepository.findByEmail(normalizedIdentifier.toLowerCase(Locale.ROOT))
-                    .orElseThrow(() -> new NotFoundException("User not found"));
-        }
+    return userRepository
+            .findByEmailAndDeletedFalse(
+                    normalizedIdentifier.toLowerCase(Locale.ROOT))
+            .orElseThrow(() ->
+                    new NotFoundException("User not found"));
+}
 
         String normalizedPhone = PhoneUtils.normalize(normalizedIdentifier);
         if (normalizedPhone == null) {
             throw new BadRequestException("Invalid identifier");
         }
 
-        return userRepository.findByPhone(normalizedPhone)
-                .orElseThrow(() -> new NotFoundException("User not found"));
+        return userRepository
+        .findByPhoneAndDeletedFalse(normalizedPhone)
+        .orElseThrow(() -> new NotFoundException("User not found"));
     }
 
     private String normalizeIdentifier(String value) {
@@ -324,4 +405,121 @@ User user = userRepository.findById(userId)
     private String normalizeEmail(String value) {
         return normalizeRequiredText(value, "Email").toLowerCase(Locale.ROOT);
     }
+
+    @Override
+@Transactional
+public AvatarResponse uploadAvatar(MultipartFile file) {
+
+    if (file == null || file.isEmpty()) {
+        throw new BadRequestException(
+                "Please select a file"
+        );
+    }
+
+    String originalFilename = file.getOriginalFilename();
+    String contentType = file.getContentType();
+
+if (contentType == null ||
+        (!contentType.equals("image/jpeg")
+        && !contentType.equals("image/png"))) {
+
+    throw new BadRequestException(
+            "Only JPG and PNG images are allowed"
+    );
+}
+
+    if (originalFilename == null) {
+        throw new BadRequestException(
+                "Invalid filename"
+        );
+    }
+
+    int dotIndex =
+            originalFilename.lastIndexOf(".");
+
+    if (dotIndex < 0) {
+        throw new BadRequestException(
+                "Missing file extension"
+        );
+    }
+
+    String extension =
+            originalFilename
+                    .substring(dotIndex)
+                    .toLowerCase();
+
+    List<String> allowedExtensions =
+            List.of(
+                    ".jpg",
+                    ".jpeg",
+                    ".png"
+            );
+
+    if (!allowedExtensions.contains(extension)) {
+        throw new BadRequestException(
+                "Only JPG and PNG are allowed"
+        );
+    }
+
+   Long userId = Objects.requireNonNull(
+        currentUserService.getCurrentUserId(),
+        "Current user id is null"
+);
+
+    User user = userRepository
+            .findByIdAndDeletedFalse(userId)
+            .orElseThrow(
+                    () -> new NotFoundException("User not found"));
+
+    String filename =
+            "avatar_" +
+                    userId +
+                    extension;
+
+    Path destination =
+            avatarRootLocation
+                    .resolve(filename);
+
+    try {
+
+        Files.copy(
+                file.getInputStream(),
+                destination,
+                StandardCopyOption.REPLACE_EXISTING
+        );
+
+        String avatarUrl =
+                "/uploads/avatars/" +
+                        filename;
+
+        user.setAvatarUrl(avatarUrl);
+
+        userRepository.save(user);
+
+        return AvatarResponse.builder()
+                .avatarUrl(avatarUrl)
+                .build();
+
+    } catch (IOException e) {
+
+        throw new RuntimeException(
+                "Failed to store avatar",
+                e
+        );
+    }
+}
+
+@Override
+@Transactional
+public void deleteUser(Long id) {
+
+    User user = userRepository
+        .findByIdAndDeletedFalse(id)
+        .orElseThrow(() ->
+                new NotFoundException("User not found"));
+
+    user.setDeleted(true);
+
+    userRepository.save(user);
+}
 }

@@ -65,4 +65,16 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
                                              @Param("startDate") LocalDateTime startDate,
                                              @Param("endDate") LocalDateTime endDate,
                                              Pageable pageable);
+
+    @Query("""
+        SELECT t
+        FROM Transaction t
+        LEFT JOIN FETCH t.senderWallet sw
+        LEFT JOIN FETCH sw.user
+        LEFT JOIN FETCH t.receiverWallet rw
+        LEFT JOIN FETCH rw.user
+        ORDER BY t.createdAt DESC
+    """)
+    List<Transaction> findAllForExport();
+
 }

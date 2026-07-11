@@ -68,7 +68,7 @@ class MysqlContainerSmokeTest {
                         .content(objectMapper.writeValueAsString(registerRequest)))
                 .andExpect(status().isCreated());
 
-        User savedUser = userRepository.findByEmail("mysql-user@example.com").orElseThrow();
+        User savedUser = userRepository.findByEmailAndDeletedFalse("mysql-user@example.com").orElseThrow();
         savedUser.setUserStatus(UserStatus.ACTIVE);
         userRepository.save(savedUser);
 

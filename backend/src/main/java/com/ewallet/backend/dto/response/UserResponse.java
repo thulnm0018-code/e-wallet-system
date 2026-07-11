@@ -14,6 +14,7 @@ public class UserResponse {
     private String phone;
     private String role;
     private String userStatus;
+    private String avatarUrl;
     private LocalDateTime createdAt;
 
     public static UserResponse fromEntity(User user) {  // Convert User entity to UserResponse DTO
@@ -26,6 +27,7 @@ public class UserResponse {
                 .phone(user.getPhone())
                 .role(user.getRole().name())
                 .userStatus(user.getUserStatus() != null ? user.getUserStatus().name() : null)
+                .avatarUrl(user.getAvatarUrl())
                 .createdAt(user.getCreatedAt())
                 .build();
     }

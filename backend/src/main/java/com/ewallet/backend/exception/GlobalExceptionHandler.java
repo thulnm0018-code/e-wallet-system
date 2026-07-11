@@ -117,6 +117,18 @@ public class GlobalExceptionHandler {
                         .build());
     }
 
+    @ExceptionHandler(ForbiddenException.class)
+        public ResponseEntity<ApiResponse<?>> handleForbidden(
+        ForbiddenException ex) {
+
+    return ResponseEntity.status(403)
+            .body(
+                    ApiResponse.builder()
+                            .message(ex.getMessage())
+                            .build()
+            );
+}
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleAll(Exception ex) {
         log.error("Unexpected error occurred", ex);

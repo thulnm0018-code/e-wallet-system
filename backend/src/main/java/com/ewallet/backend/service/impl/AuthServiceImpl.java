@@ -75,7 +75,7 @@ public class AuthServiceImpl implements AuthService {
         boolean isEmail = input.matches("^[A-Za-z0-9+_.-]+@(.+)$");
 
         if (isEmail) {
-            user = userRepository.findByEmail(input.toLowerCase())
+            user = userRepository.findByEmailAndDeletedFalse(input.toLowerCase())
                     .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
         } else {
            String cleanPhone = PhoneUtils.normalize(input);
@@ -84,7 +84,7 @@ public class AuthServiceImpl implements AuthService {
                 throw new UnauthorizedException("Invalid credentials");
             }
 
-            user = userRepository.findByPhone(cleanPhone)
+            user = userRepository.findByPhoneAndDeletedFalse(cleanPhone)
                     .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
         }
         // Check if user is pending verification
