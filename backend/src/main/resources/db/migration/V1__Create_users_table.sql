@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     role VARCHAR(50) NOT NULL DEFAULT 'USER',
     user_status VARCHAR(50) NOT NULL DEFAULT 'PENDING_VERIFICATION',
+    avatar_url VARCHAR(500),
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL,
     INDEX idx_email (email),
