@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.List;
@@ -76,5 +77,12 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
         ORDER BY t.createdAt DESC
     """)
     List<Transaction> findAllForExport();
+
+    @Query("""
+    SELECT COALESCE(SUM(t.amount), 0)
+    FROM Transaction t
+    WHERE t.status = com.ewallet.backend.enums.TransactionStatus.SUCCESS
+    """)
+    BigDecimal getTotalTransactionVolume();
 
 }

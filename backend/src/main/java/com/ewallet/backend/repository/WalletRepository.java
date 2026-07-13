@@ -1,6 +1,7 @@
 package com.ewallet.backend.repository;
 
 import com.ewallet.backend.entity.Wallet;
+import com.ewallet.backend.enums.WalletStatus;
 
 import jakarta.persistence.LockModeType;
 
@@ -30,4 +31,6 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
     Optional<Wallet> findByIdForUpdate(
         @Param("walletId") Long walletId
     );
+
+    long countByWalletStatus(WalletStatus walletStatus);
 }

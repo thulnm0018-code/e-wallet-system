@@ -23,11 +23,6 @@ public class AdminExportController {
         this.transactionRepository = transactionRepository;
     }
 
-    @GetMapping("/ping")
-public String ping() {
-    return "pong";
-}
-
     @GetMapping("/transactions")
     public void exportTransactionsToCsv(
             HttpServletResponse response

@@ -9,7 +9,12 @@ import java.math.BigDecimal;
 @Builder
 public class AdminDashboardResponse {
     private long totalUsers;
+    private long activeUsers;
+    private long lockedUsers;
+    
     private long activeWallets;
+    private long totalTransactions;
     private BigDecimal totalVolume;
+    private BigDecimal totalRevenue;
     private long pendingReviews;
 }

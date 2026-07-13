@@ -1,6 +1,7 @@
 package com.ewallet.backend.repository;
 
 import com.ewallet.backend.entity.User;
+import com.ewallet.backend.enums.UserStatus;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
@@ -25,5 +26,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByPhoneAndDeletedFalse(String phone);
 
     long countByDeletedFalse();
+
+    long countByUserStatusAndDeletedFalse(UserStatus status);
 }
 
