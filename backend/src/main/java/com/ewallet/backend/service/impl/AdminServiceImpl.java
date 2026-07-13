@@ -1,16 +1,22 @@
 package com.ewallet.backend.service.impl;
 
+import com.ewallet.backend.dto.response.MonthlyStatisticResponse;
 import com.ewallet.backend.dto.response.AdminDashboardResponse;
+import com.ewallet.backend.dto.response.AdminUserResponse;
 import com.ewallet.backend.enums.UserStatus;
 import com.ewallet.backend.enums.WalletStatus;
 import com.ewallet.backend.repository.TransactionRepository;
 import com.ewallet.backend.repository.UserRepository;
 import com.ewallet.backend.repository.WalletRepository;
 import com.ewallet.backend.service.AdminService;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Service
 @Transactional(readOnly = true)
@@ -73,4 +79,46 @@ public class AdminServiceImpl implements AdminService {
                 )
                 .build();
     }
+    @Override
+public List<MonthlyStatisticResponse> getMonthlyStatistics() {
+
+    return transactionRepository
+            .getMonthlyStatistics()
+            .stream()
+            .map(item ->
+                    new MonthlyStatisticResponse(
+                            item.getYear() + "-"
+                                    + String.format("%02d", item.getMonth()),
+                            item.getTransactionCount(),
+                            item.getTotalVolume()
+                    )
+            )
+            .toList();
+}
+
+@Override
+public Page<AdminUserResponse> searchUsers(
+        String keyword,
+        UserStatus status,
+        Pageable pageable
+) {
+
+    return userRepository
+            .searchUsers(
+                    keyword,
+                    status,
+                    pageable
+            )
+            .map(user ->
+                    AdminUserResponse.builder()
+                            .id(user.getId())
+                            .name(user.getName())
+                            .email(user.getEmail())
+                            .phone(user.getPhone())
+                            .role(user.getRole().name())
+                            .userStatus(user.getUserStatus())
+                            .build()
+            );
+}
+
 }

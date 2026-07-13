@@ -2,6 +2,8 @@ package com.ewallet.backend.repository;
 
 import com.ewallet.backend.entity.Transaction;
 import com.ewallet.backend.enums.TransactionType;
+import com.ewallet.backend.repository.projection.MonthlyStatisticProjection;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -85,4 +87,17 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     """)
     BigDecimal getTotalTransactionVolume();
 
+    @Query(value = """
+    SELECT
+        YEAR(created_at) AS year,
+        MONTH(created_at) AS month,
+        COUNT(*) AS transactionCount,
+        COALESCE(SUM(amount),0) AS totalVolume
+    FROM transactions
+    WHERE status = 'SUCCESS'
+    GROUP BY YEAR(created_at), MONTH(created_at)
+    ORDER BY YEAR(created_at), MONTH(created_at)
+    """,
+    nativeQuery = true)
+    List<MonthlyStatisticProjection> getMonthlyStatistics();
 }
