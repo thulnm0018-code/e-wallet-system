@@ -1,5 +1,8 @@
 package com.ewallet.backend.service.impl;
 
+import com.ewallet.backend.entity.User;
+import com.ewallet.backend.exception.BadRequestException;
+import com.ewallet.backend.exception.NotFoundException;
 import com.ewallet.backend.dto.response.MonthlyStatisticResponse;
 import com.ewallet.backend.dto.response.AdminDashboardResponse;
 import com.ewallet.backend.dto.response.AdminUserResponse;
@@ -12,6 +15,7 @@ import com.ewallet.backend.service.AdminService;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -121,4 +125,41 @@ public Page<AdminUserResponse> searchUsers(
             );
 }
 
+@Override
+@Transactional
+public void deleteUser(Long userId) {
+
+    Long currentUserId =
+        Long.parseLong(
+                SecurityContextHolder
+                        .getContext()
+                        .getAuthentication()
+                        .getPrincipal()
+                        .toString()
+        );
+
+if (currentUserId.equals(userId)) {
+    throw new BadRequestException("Cannot delete your own account");
+}
+
+    User user = userRepository.findByIdAndDeletedFalse(userId)
+            .orElseThrow(() ->new NotFoundException("User not found"));
+
+            user.setDeleted(true);
+            userRepository.save(user);
+}
+
+     @Override
+    @Transactional
+public void restoreUser(Long userId) {
+
+    User user = userRepository
+            .findByIdAndDeletedTrue(userId)
+            .orElseThrow(() ->
+                    new NotFoundException("Deleted user not found"));
+
+    user.setDeleted(false);
+
+    userRepository.save(user);
+}   
 }

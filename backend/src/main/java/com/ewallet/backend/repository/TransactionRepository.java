@@ -100,4 +100,54 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     """,
     nativeQuery = true)
     List<MonthlyStatisticProjection> getMonthlyStatistics();
+
+            @Query("""
+        SELECT COALESCE(SUM(t.serviceFee), 0)
+        FROM Transaction t
+        WHERE t.status =
+        com.ewallet.backend.enums.TransactionStatus.SUCCESS
+        AND t.type =
+        com.ewallet.backend.enums.TransactionType.TRANSFER
+    """)
+    BigDecimal getTotalRevenue();
+
+            @Query("""
+        SELECT COUNT(t)
+        FROM Transaction t
+        WHERE t.status =
+        com.ewallet.backend.enums.TransactionStatus.SUCCESS
+        AND t.type =
+        com.ewallet.backend.enums.TransactionType.TRANSFER
+    """)
+    Long getTotalCompletedTransactions();
+        
+        @Query("""
+    SELECT COALESCE(SUM(t.serviceFee), 0)
+    FROM Transaction t
+    WHERE YEAR(t.createdAt)=:year
+    AND MONTH(t.createdAt)=:month
+    AND t.status =
+    com.ewallet.backend.enums.TransactionStatus.SUCCESS
+    AND t.type =
+    com.ewallet.backend.enums.TransactionType.TRANSFER
+""")
+BigDecimal getRevenueByMonth(
+        Integer year,
+        Integer month
+);
+
+            @Query("""
+        SELECT
+        MONTH(t.createdAt),
+        COALESCE(SUM(t.serviceFee),0)
+        FROM Transaction t
+        WHERE YEAR(t.createdAt)=:year
+        AND t.status =
+        com.ewallet.backend.enums.TransactionStatus.SUCCESS
+        AND t.type =
+        com.ewallet.backend.enums.TransactionType.TRANSFER
+        GROUP BY MONTH(t.createdAt)
+        ORDER BY MONTH(t.createdAt)
+    """)
+    List<Object[]> getMonthlyRevenue(Integer year);
 }

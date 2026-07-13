@@ -268,8 +268,11 @@ try {
     walletRepository.saveAll(Objects.requireNonNull(List.of(senderWallet, receiverWallet)));
 
 
-        Transaction transaction = Transaction.builder()
-                
+    BigDecimal fee = request.getAmount().multiply(BigDecimal.valueOf(0.01));
+    
+        Transaction transaction = Transaction
+                .builder()
+                .serviceFee(fee)
                 .transactionCode(codeGenerator.generate())
                 .senderWallet(senderWallet)
                 .receiverWallet(receiverWallet)
@@ -339,6 +342,7 @@ finally {
             .senderWallet(null)
             .receiverWallet(lockedWallet)
             .amount(request.getAmount())
+            .serviceFee(BigDecimal.ZERO)
             .message(request.getMessage() == null
                         || request.getMessage().isBlank()
                         ? "Deposit money"
@@ -389,23 +393,17 @@ finally {
     walletRepository.save(lockedWallet);
 
     Transaction transaction = Transaction.builder()
-            .transactionCode(
-                    codeGenerator.generate()
-            )
-
+            .transactionCode(codeGenerator.generate())
             .senderWallet(lockedWallet)
-
             .receiverWallet(null)
-
             .amount(request.getAmount())
-
+            .serviceFee(BigDecimal.ZERO)
             .message(
                     request.getMessage() == null
                             || request.getMessage().isBlank()
                             ? "Withdraw money"
                             : request.getMessage()
             )
-
             .type(TransactionType.WITHDRAW)
             .status(TransactionStatus.SUCCESS)
             .build();

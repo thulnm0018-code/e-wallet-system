@@ -20,4 +20,7 @@ public interface AdminService {
         UserStatus status,
         Pageable pageable
     );
+
+    void deleteUser(Long userId);
+    void restoreUser(Long userId);
 }

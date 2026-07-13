@@ -65,6 +65,15 @@ public class Transaction {
     )
     private BigDecimal amount;
 
+        @Column(
+            name = "service_fee",
+            nullable = false,
+            precision = 15,
+            scale = 2
+    )
+    @Builder.Default
+    private BigDecimal serviceFee = BigDecimal.ZERO;
+    
     @Column(length = 255)
     private String message;
 

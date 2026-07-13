@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     sender_wallet_id BIGINT,
     receiver_wallet_id BIGINT,
     amount DECIMAL(15, 2) NOT NULL,
+    service_fee DECIMAL(15, 2) NOT NULL DEFAULT 0,
     message VARCHAR(255),
     status VARCHAR(50) NOT NULL,
     type VARCHAR(50) NOT NULL,

@@ -7,12 +7,15 @@ import com.ewallet.backend.dto.response.MonthlyStatisticResponse;
 import com.ewallet.backend.enums.UserStatus;
 import com.ewallet.backend.service.AdminService;
 
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -88,6 +91,34 @@ public ResponseEntity<
                                     pageable
                             )
                     )
+                    .build()
+    );
+}
+
+    @DeleteMapping("/users/{userId}")
+public ResponseEntity<ApiResponse<Void>> deleteUser(
+        @PathVariable Long userId
+) {
+
+    adminService.deleteUser(userId);
+
+    return ResponseEntity.ok(
+            ApiResponse.<Void>builder()
+                    .message("User deleted successfully")
+                    .build()
+    );
+}
+
+@PatchMapping("/users/{userId}/restore")
+public ResponseEntity<ApiResponse<Void>> restoreUser(
+        @PathVariable Long userId
+) {
+
+    adminService.restoreUser(userId);
+
+    return ResponseEntity.ok(
+            ApiResponse.<Void>builder()
+                    .message("User restored successfully")
                     .build()
     );
 }
