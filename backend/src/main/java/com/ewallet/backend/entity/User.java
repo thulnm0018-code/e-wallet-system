@@ -52,6 +52,13 @@ public class User {
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Otp> otps = new ArrayList<>();
 
+    @OneToMany(
+        mappedBy = "user",
+        cascade = CascadeType.ALL,
+        orphanRemoval = true
+    )
+    private List<LinkedBankAccount> linkedBankAccounts = new ArrayList<>();
+
     @Column(length = 500)
     private String avatarUrl;
 
