@@ -1,9 +1,12 @@
 package com.ewallet.backend.service.impl;
 
 import jakarta.persistence.LockTimeoutException;
+
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.ewallet.backend.service.NotificationService;
 import com.ewallet.backend.exception.ResourceConflictException;
 import com.ewallet.backend.dto.request.DepositRequest;
 import com.ewallet.backend.dto.request.TransferRequest;
@@ -33,6 +36,7 @@ import com.ewallet.backend.exception.BadRequestException;
 import com.ewallet.backend.exception.ForbiddenException;
 import com.ewallet.backend.exception.AccountInactiveException;
 import com.ewallet.backend.mapper.TransactionMapper;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,6 +60,7 @@ public class WalletServiceImpl implements WalletService {
     private final CurrentUserService currentUserService;
     private final TransactionMapper transactionMapper;
     private final OtpRepository otpRepository;
+    private final NotificationService notificationService;
 
     private static final BigDecimal MIN_TRANSFER_AMOUNT =new BigDecimal("1.00");
     private static final BigDecimal MAX_TRANSFER_AMOUNT =new BigDecimal("5000.00");
@@ -69,7 +74,8 @@ public class WalletServiceImpl implements WalletService {
             TransactionCodeGenerator codeGenerator,
             CurrentUserService currentUserService,
             TransactionMapper transactionMapper,
-            OtpRepository otpRepository) {
+            OtpRepository otpRepository,
+            NotificationService notificationService) {
 
         this.walletRepository = walletRepository;
         this.transactionRepository = transactionRepository;
@@ -77,6 +83,7 @@ public class WalletServiceImpl implements WalletService {
         this.currentUserService = currentUserService;
         this.transactionMapper = transactionMapper;
         this.otpRepository = otpRepository;
+        this.notificationService = notificationService;
   
     }
 
@@ -276,8 +283,25 @@ try {
 
         Transaction savedTransaction =
         transactionRepository.save(
-                Objects.requireNonNull(transaction)
-        );
+                Objects.requireNonNull(transaction));
+
+    notificationService.createNotification(
+        senderWallet.getUser(),
+        "Transfer Success",
+        "You transferred "
+                + request.getAmount()
+                + " VND to "
+                + receiverWallet.getUser().getPhone()
+);
+
+notificationService.createNotification(
+        receiverWallet.getUser(),
+        "Money Received",
+        "You received "
+                + request.getAmount()
+                + " VND from "
+                + senderWallet.getUser().getPhone()
+);
 
         otp.setFailedAttempts(0);
         otp.setVerified(true);
@@ -328,6 +352,13 @@ finally {
                     Objects.requireNonNull(transaction)
             );
 
+            notificationService.createNotification(
+        lockedWallet.getUser(),
+        "Deposit Success",
+        "You deposited "
+                + request.getAmount()
+                + " VND"
+);
     return transactionMapper.toResponse(savedTransaction);
 }
     
@@ -384,6 +415,13 @@ finally {
                     Objects.requireNonNull(transaction)
             );
 
+            notificationService.createNotification(
+        lockedWallet.getUser(),
+        "Withdrawal Success",
+        "You withdrew "
+                + request.getAmount()
+                + " VND"
+);
     return transactionMapper.toResponse(
             savedTransaction
     );
