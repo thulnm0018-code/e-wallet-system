@@ -18,14 +18,17 @@ import com.ewallet.backend.dto.response.TransferOtpResponse;
 import com.ewallet.backend.dto.response.WalletResponse;
 import com.ewallet.backend.entity.Transaction;
 import com.ewallet.backend.entity.Wallet;
+import com.ewallet.backend.entity.WithdrawalRequest;
 import com.ewallet.backend.entity.Otp;
 import com.ewallet.backend.entity.User;
 import com.ewallet.backend.enums.TransactionStatus;
 import com.ewallet.backend.enums.TransactionType;
 import com.ewallet.backend.enums.UserStatus;
 import com.ewallet.backend.enums.WalletStatus;
+import com.ewallet.backend.enums.WithdrawalStatus;
 import com.ewallet.backend.repository.TransactionRepository;
 import com.ewallet.backend.repository.WalletRepository;
+import com.ewallet.backend.repository.WithdrawalRequestRepository;
 import com.ewallet.backend.repository.OtpRepository;
 import com.ewallet.backend.security.service.CurrentUserService;
 import com.ewallet.backend.service.WalletService;
@@ -63,10 +66,11 @@ public class WalletServiceImpl implements WalletService {
     private final OtpRepository otpRepository;
     private final NotificationService notificationService;
     private final SuspiciousActivityService suspiciousActivityService;
+    private final WithdrawalRequestRepository withdrawalRequestRepository;
 
     private static final BigDecimal MIN_TRANSFER_AMOUNT =new BigDecimal("1.00");
     private static final BigDecimal MAX_TRANSFER_AMOUNT =new BigDecimal("5000.00");
-
+    private static final BigDecimal WITHDRAW_APPROVAL_THRESHOLD = new BigDecimal("3000");
     private final ConcurrentHashMap<String, Boolean>processingTransfers = new ConcurrentHashMap<>();
 
 
@@ -78,7 +82,8 @@ public class WalletServiceImpl implements WalletService {
             TransactionMapper transactionMapper,
             OtpRepository otpRepository,
             NotificationService notificationService,
-            SuspiciousActivityService suspiciousActivityService) {
+            SuspiciousActivityService suspiciousActivityService,
+            WithdrawalRequestRepository withdrawalRequestRepository) {
 
         this.walletRepository = walletRepository;
         this.transactionRepository = transactionRepository;
@@ -88,6 +93,7 @@ public class WalletServiceImpl implements WalletService {
         this.otpRepository = otpRepository;
         this.notificationService = notificationService;
         this.suspiciousActivityService = suspiciousActivityService;
+        this.withdrawalRequestRepository = withdrawalRequestRepository;
   
     }
 
@@ -400,6 +406,37 @@ finally {
                 "Insufficient balance"
         );
     }
+
+        if (request.getAmount().compareTo(
+        WITHDRAW_APPROVAL_THRESHOLD) > 0) {
+
+    WithdrawalRequest withdrawalRequest =
+            WithdrawalRequest.builder()
+                    .user(lockedWallet.getUser())
+                    .amount(request.getAmount())
+                    .status(WithdrawalStatus.PENDING)
+                    .build();
+
+    withdrawalRequestRepository.save(
+            Objects.requireNonNull(withdrawalRequest)
+    );
+
+    notificationService.createNotification(
+        lockedWallet.getUser(),
+        "Withdrawal Request Submitted",
+        "Your withdrawal request is pending approval"
+);
+
+    return TransactionResponse.builder()
+            .transactionCode("PENDING")
+            .message(
+                "Withdrawal request submitted and waiting for admin approval")
+            .status(TransactionStatus.PENDING)
+            .type(TransactionType.WITHDRAW)
+            .amount(request.getAmount())
+            .createdAt(LocalDateTime.now())
+            .build();
+}
 
     lockedWallet.setBalance(lockedWallet.getBalance()
                 .subtract(request.getAmount()));
