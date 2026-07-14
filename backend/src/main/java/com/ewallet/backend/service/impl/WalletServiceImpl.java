@@ -50,6 +50,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Objects;
@@ -192,6 +193,28 @@ public class WalletServiceImpl implements WalletService {
         validateAmount(request.getAmount());
         validateTransferLimits(request.getAmount());
 
+        String idempotencyKey = request.getIdempotencyKey();
+
+        if (idempotencyKey != null
+                && !idempotencyKey.isBlank()) {
+
+            Optional<Transaction> existingTransaction =
+                    transactionRepository.findByIdempotencyKey(
+                            idempotencyKey
+                    );
+
+            if (existingTransaction.isPresent()) {
+
+                log.info(
+                        "[TRANSFER] Duplicate request detected. Returning existing transaction {}",
+                        existingTransaction.get().getTransactionCode()
+                );
+
+                return transactionMapper.toResponse(
+                        existingTransaction.get()
+                );
+            }
+        }
         String transferKey = senderUserId + "-" + request.getAmount() + "-" + request.getReceiverPhone();
 
         if (processingTransfers.putIfAbsent(transferKey,Boolean.TRUE) != null) {
@@ -291,6 +314,7 @@ try {
                 .builder()
                 .serviceFee(fee)
                 .transactionCode(codeGenerator.generate())
+                .idempotencyKey(idempotencyKey)
                 .senderWallet(senderWallet)
                 .receiverWallet(receiverWallet)
                 .amount(request.getAmount())
@@ -379,9 +403,25 @@ finally {
 
         validateAmount(request.getAmount());
 
+        String idempotencyKey = request.getIdempotencyKey();
+
+        if (idempotencyKey != null
+                && !idempotencyKey.isBlank()) {
+
+            Optional<Transaction> existingTransaction =
+                    transactionRepository.findByIdempotencyKey(
+                            idempotencyKey
+                    );
+
+            if (existingTransaction.isPresent()) {
+                return transactionMapper.toResponse(existingTransaction.get());
+            }
+        }
+
         Wallet wallet = getWalletByUserId(userId);
         Wallet lockedWallet = lockWallet(wallet.getId());
 
+        
     
         validateActiveWallet(lockedWallet, "Wallet");
         validateUserStatus(lockedWallet.getUser());
@@ -391,6 +431,7 @@ finally {
 
     Transaction transaction = Transaction.builder()
             .transactionCode(codeGenerator.generate())
+            .idempotencyKey(idempotencyKey)
             .senderWallet(null)
             .receiverWallet(lockedWallet)
             .amount(request.getAmount())
@@ -439,6 +480,47 @@ finally {
 
         validateAmount(request.getAmount());
 
+        String idempotencyKey = request.getIdempotencyKey();
+
+        if (idempotencyKey != null
+                && !idempotencyKey.isBlank()) {
+
+            Optional<Transaction> existingTransaction =
+                    transactionRepository.findByIdempotencyKey(
+                            idempotencyKey
+                    );
+
+            if (existingTransaction.isPresent()) {
+                return transactionMapper.toResponse(
+                        existingTransaction.get()
+                );
+            }
+
+            Optional<WithdrawalRequest> existingRequest =
+                    withdrawalRequestRepository
+                            .findByIdempotencyKey(
+                                    idempotencyKey
+                            );
+
+            if (existingRequest.isPresent()) {
+
+                return TransactionResponse.builder()
+                        .transactionCode("PENDING")
+                        .message(
+                                "Withdrawal request submitted and waiting for admin approval"
+                        )
+                        .status(TransactionStatus.PENDING)
+                        .type(TransactionType.WITHDRAW)
+                        .amount(
+                                existingRequest.get().getAmount()
+                        )
+                        .createdAt(
+                                existingRequest.get().getCreatedAt()
+                        )
+                        .build();
+            }
+        }
+
         Wallet wallet = getWalletByUserId(userId);
 
       Wallet lockedWallet = lockWallet(wallet.getId());
@@ -457,15 +539,19 @@ finally {
         WITHDRAW_APPROVAL_THRESHOLD) > 0) {
 
     WithdrawalRequest withdrawalRequest =
-            WithdrawalRequest.builder()
-                    .user(lockedWallet.getUser())
-                    .amount(request.getAmount())
-                    .status(WithdrawalStatus.PENDING)
-                    .build();
+        WithdrawalRequest.builder()
+                .user(lockedWallet.getUser())
+                .amount(request.getAmount())
+                .status(WithdrawalStatus.PENDING)
+                .idempotencyKey(
+                        idempotencyKey
+                )
+                .build();
 
-    withdrawalRequestRepository.save(
-            Objects.requireNonNull(withdrawalRequest)
-    );
+    WithdrawalRequest savedRequest =
+        withdrawalRequestRepository.save(
+                Objects.requireNonNull(withdrawalRequest)
+        );
 
     rabbitProducerService.sendNotification(
         NotificationMessage.builder()
@@ -488,7 +574,7 @@ finally {
             .status(TransactionStatus.PENDING)
             .type(TransactionType.WITHDRAW)
             .amount(request.getAmount())
-            .createdAt(LocalDateTime.now())
+            .createdAt(savedRequest.getCreatedAt())
             .build();
 }
 
@@ -499,6 +585,7 @@ finally {
 
     Transaction transaction = Transaction.builder()
             .transactionCode(codeGenerator.generate())
+            .idempotencyKey(idempotencyKey)
             .senderWallet(lockedWallet)
             .receiverWallet(null)
             .amount(request.getAmount())

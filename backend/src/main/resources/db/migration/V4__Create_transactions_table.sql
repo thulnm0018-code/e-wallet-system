@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS transactions (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     transaction_code VARCHAR(100) NOT NULL UNIQUE,
+    idempotency_key VARCHAR(100) UNIQUE,
     sender_wallet_id BIGINT,
     receiver_wallet_id BIGINT,
     amount DECIMAL(15, 2) NOT NULL,

@@ -15,6 +15,7 @@ import com.ewallet.backend.enums.TransactionStatus;
 import com.ewallet.backend.enums.TransactionType;
 import com.ewallet.backend.enums.UserStatus;
 import com.ewallet.backend.enums.WalletStatus;
+import com.ewallet.backend.enums.WithdrawalStatus;
 import com.ewallet.backend.exception.BadRequestException;
 import com.ewallet.backend.exception.NotFoundException;
 import com.ewallet.backend.exception.ResourceConflictException;
@@ -723,4 +724,182 @@ class WalletServiceImplTest {
 
         assertThat(history).isEmpty();
     }
+
+    @SuppressWarnings("null")
+    @Test
+void shouldReturnExistingTransactionWhenIdempotencyKeyExists() {
+
+    Transaction existingTransaction =
+            Transaction.builder()
+                    .id(1L)
+                    .transactionCode("TXN-EXISTING")
+                    .idempotencyKey("abc-123")
+                    .build();
+
+    TransactionResponse existingResponse =
+            TransactionResponse.builder()
+                    .transactionCode("TXN-EXISTING")
+                    .build();
+
+    when(
+            transactionRepository.findByIdempotencyKey(
+                    "abc-123"
+            )
+    ).thenReturn(
+            Optional.of(existingTransaction)
+    );
+
+    when(
+            transactionMapper.toResponse(
+                    existingTransaction
+            )
+    ).thenReturn(existingResponse);
+
+    TransferRequest request =
+            TransferRequest.builder()
+                    .receiverPhone("0987654322")
+                    .amount(new BigDecimal("25.50"))
+                    .otpCode("123456")
+                    .idempotencyKey("abc-123")
+                    .build();
+
+    TransactionResponse response =
+            walletService.transferMoney(request);
+
+    assertEquals(
+            "TXN-EXISTING",
+            response.getTransactionCode()
+    );
+
+    verify(otpRepository, never())
+        .findTopByUserOrderByCreatedAtDesc(any());
+        
+    verify(
+            transactionRepository,
+            never()
+    ).save(any(Transaction.class));
+
+    verify(
+            walletRepository,
+            never()
+    ).saveAll(anyList());
+}
+
+@SuppressWarnings("null")
+@Test
+void shouldReturnExistingWithdrawTransactionWhenIdempotencyKeyExists() {
+
+    Transaction existingTransaction =
+            Transaction.builder()
+                    .id(1L)
+                    .transactionCode("WD-001")
+                    .idempotencyKey("withdraw-success")
+                    .type(TransactionType.WITHDRAW)
+                    .status(TransactionStatus.SUCCESS)
+                    .build();
+
+    TransactionResponse existingResponse =
+            TransactionResponse.builder()
+                    .transactionCode("WD-001")
+                    .status(TransactionStatus.SUCCESS)
+                    .type(TransactionType.WITHDRAW)
+                    .build();
+
+    when(
+            transactionRepository.findByIdempotencyKey(
+                    "withdraw-success"
+            )
+    ).thenReturn(Optional.of(existingTransaction));
+
+    when(
+            transactionMapper.toResponse(
+                    existingTransaction
+            )
+    ).thenReturn(existingResponse);
+
+    WithdrawRequest request =
+            new WithdrawRequest();
+
+    request.setAmount(
+            new BigDecimal("100")
+    );
+
+    request.setIdempotencyKey(
+            "withdraw-success"
+    );
+
+    TransactionResponse response =
+            walletService.withdrawMoney(
+                    request
+            );
+
+    assertEquals(
+            "WD-001",
+            response.getTransactionCode()
+    );
+
+    verify(
+            transactionRepository,
+            never()
+    ).save(any(Transaction.class));
+} 
+
+@SuppressWarnings("null")
+@Test
+void shouldReturnExistingPendingWithdrawalWhenIdempotencyKeyExists() {
+
+    WithdrawalRequest existingRequest =
+            WithdrawalRequest.builder()
+                    .id(100L)
+                    .amount(new BigDecimal("5000"))
+                    .status(WithdrawalStatus.PENDING)
+                    .idempotencyKey("pending-123")
+                    .build();
+
+    when(
+            transactionRepository
+                    .findByIdempotencyKey(
+                            "pending-123"
+                    )
+    ).thenReturn(Optional.empty());
+
+    when(
+            withdrawalRequestRepository
+                    .findByIdempotencyKey(
+                            "pending-123"
+                    )
+    ).thenReturn(Optional.of(existingRequest));
+
+    WithdrawRequest request =
+            new WithdrawRequest();
+
+    request.setAmount(
+            new BigDecimal("5000")
+    );
+
+    request.setIdempotencyKey(
+            "pending-123"
+    );
+
+    TransactionResponse response =
+            walletService.withdrawMoney(
+                    request
+            );
+
+    assertEquals(
+            TransactionStatus.PENDING,
+            response.getStatus()
+    );
+
+    verify(
+            withdrawalRequestRepository,
+            never()
+    ).save(any());
+
+    verify(
+            transactionRepository,
+            never()
+    ).save(any());
+}
+
 }

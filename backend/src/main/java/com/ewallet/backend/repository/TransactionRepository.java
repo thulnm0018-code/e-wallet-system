@@ -182,4 +182,6 @@ BigDecimal getRevenueByMonth(
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end
     );
+
+    Optional<Transaction>findByIdempotencyKey(String idempotencyKey);
 }

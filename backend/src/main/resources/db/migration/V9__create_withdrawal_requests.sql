@@ -8,6 +8,8 @@ CREATE TABLE withdrawal_requests (
 
     status VARCHAR(30) NOT NULL,
 
+    idempotency_key VARCHAR(100),
+
     created_at TIMESTAMP NOT NULL,
 
     approved_at TIMESTAMP NULL,

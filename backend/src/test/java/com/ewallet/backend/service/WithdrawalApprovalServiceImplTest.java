@@ -134,4 +134,5 @@ class WithdrawalApprovalServiceImplTest {
 
         assertThrows(BadRequestException.class, () -> service.approve(100L));
     }
+    
 }

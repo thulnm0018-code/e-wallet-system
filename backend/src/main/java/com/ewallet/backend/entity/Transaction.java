@@ -50,6 +50,13 @@ public class Transaction {
     )
     private String transactionCode;
 
+    @Column(
+    name = "idempotency_key",
+    unique = true,
+    length = 100
+)
+private String idempotencyKey;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "sender_wallet_id")
     private Wallet senderWallet;

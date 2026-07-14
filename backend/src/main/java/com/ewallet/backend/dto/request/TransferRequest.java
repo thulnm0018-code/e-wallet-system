@@ -29,4 +29,11 @@ public class TransferRequest {
 
     @Size(min = 6, max = 6, message = "OTP must be exactly 6 digits")
     private String otpCode;
+
+    @Size(
+    max = 100,
+    message = "Idempotency key cannot exceed 100 characters"
+)
+    private String idempotencyKey;
+
 }

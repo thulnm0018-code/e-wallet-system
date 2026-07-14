@@ -5,6 +5,7 @@ import com.ewallet.backend.enums.WithdrawalStatus;
 import jakarta.persistence.*;
 
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -56,6 +57,16 @@ public class WithdrawalRequest {
     @Column(nullable = false, length = 30)
     private WithdrawalStatus status;
 
+    
+        @Column(
+                name = "idempotency_key",
+                unique = true,
+                length = 100
+        )
+        private String idempotencyKey;
+
+
+    @CreationTimestamp
     @Column(
             name = "created_at",
             nullable = false,
@@ -69,11 +80,6 @@ public class WithdrawalRequest {
     @Column(name = "rejected_at")
     private LocalDateTime rejectedAt;
 
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-    }
-
     public boolean isPending() {
         return status == WithdrawalStatus.PENDING;
     }
@@ -85,4 +91,6 @@ public class WithdrawalRequest {
     public boolean isRejected() {
         return status == WithdrawalStatus.REJECTED;
     }
+
+
 }
