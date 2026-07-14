@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.ewallet.backend.service.NotificationService;
+import com.ewallet.backend.service.SuspiciousActivityService;
 import com.ewallet.backend.exception.ResourceConflictException;
 import com.ewallet.backend.dto.request.DepositRequest;
 import com.ewallet.backend.dto.request.TransferRequest;
@@ -61,6 +62,7 @@ public class WalletServiceImpl implements WalletService {
     private final TransactionMapper transactionMapper;
     private final OtpRepository otpRepository;
     private final NotificationService notificationService;
+    private final SuspiciousActivityService suspiciousActivityService;
 
     private static final BigDecimal MIN_TRANSFER_AMOUNT =new BigDecimal("1.00");
     private static final BigDecimal MAX_TRANSFER_AMOUNT =new BigDecimal("5000.00");
@@ -75,7 +77,8 @@ public class WalletServiceImpl implements WalletService {
             CurrentUserService currentUserService,
             TransactionMapper transactionMapper,
             OtpRepository otpRepository,
-            NotificationService notificationService) {
+            NotificationService notificationService,
+            SuspiciousActivityService suspiciousActivityService) {
 
         this.walletRepository = walletRepository;
         this.transactionRepository = transactionRepository;
@@ -84,6 +87,7 @@ public class WalletServiceImpl implements WalletService {
         this.transactionMapper = transactionMapper;
         this.otpRepository = otpRepository;
         this.notificationService = notificationService;
+        this.suspiciousActivityService = suspiciousActivityService;
   
     }
 
@@ -287,6 +291,16 @@ try {
         Transaction savedTransaction =
         transactionRepository.save(
                 Objects.requireNonNull(transaction));
+    
+    suspiciousActivityService
+        .detectRapidTransfers(
+                senderWallet.getUser()
+        );
+
+suspiciousActivityService
+        .detectDailyTransferLimit(
+                senderWallet.getUser()
+        );
 
     notificationService.createNotification(
         senderWallet.getUser(),

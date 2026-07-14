@@ -150,4 +150,36 @@ BigDecimal getRevenueByMonth(
         ORDER BY MONTH(t.createdAt)
     """)
     List<Object[]> getMonthlyRevenue(Integer year);
+
+            @Query("""
+            SELECT COUNT(t)
+            FROM Transaction t
+            WHERE t.senderWallet.user.id = :userId
+            AND t.type =
+                com.ewallet.backend.enums.TransactionType.TRANSFER
+            AND t.status =
+                com.ewallet.backend.enums.TransactionStatus.SUCCESS
+            AND t.createdAt >= :since
+        """)
+        Long countRecentTransfers(
+                @Param("userId") Long userId,
+                @Param("since") LocalDateTime since
+        );
+
+            @Query("""
+        SELECT COALESCE(SUM(t.amount), 0)
+        FROM Transaction t
+        WHERE t.senderWallet.user.id = :userId
+        AND t.type =
+            com.ewallet.backend.enums.TransactionType.TRANSFER
+        AND t.status =
+            com.ewallet.backend.enums.TransactionStatus.SUCCESS
+        AND t.createdAt >= :start
+        AND t.createdAt <= :end
+    """)
+    BigDecimal getTodayTransferAmount(
+            @Param("userId") Long userId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
 }
