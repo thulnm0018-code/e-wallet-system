@@ -14,8 +14,9 @@ import com.ewallet.backend.exception.NotFoundException;
 import com.ewallet.backend.repository.TransactionRepository;
 import com.ewallet.backend.repository.WalletRepository;
 import com.ewallet.backend.repository.WithdrawalRequestRepository;
-import com.ewallet.backend.service.NotificationService;
+import com.ewallet.backend.dto.message.NotificationMessage;
 import com.ewallet.backend.service.AuditLogService;
+import com.ewallet.backend.service.RabbitProducerService;
 import com.ewallet.backend.service.WithdrawalApprovalService;
 
 import org.springframework.stereotype.Service;
@@ -34,28 +35,28 @@ public class WithdrawalApprovalServiceImpl
 
     private final WalletRepository walletRepository;
 
-    private final NotificationService notificationService;
-
     private final TransactionRepository transactionRepository;
 
     private final TransactionCodeGenerator codeGenerator;
 
     private final AuditLogService auditLogService;
 
+    private final RabbitProducerService rabbitProducerService;
+
     public WithdrawalApprovalServiceImpl(
             WithdrawalRequestRepository requestRepository,
             WalletRepository walletRepository,
-            NotificationService notificationService,
             TransactionRepository transactionRepository,
             TransactionCodeGenerator codeGenerator,
-            AuditLogService auditLogService
+            AuditLogService auditLogService,
+            RabbitProducerService rabbitProducerService
     ) {
         this.requestRepository = requestRepository;
         this.walletRepository = walletRepository;
-        this.notificationService = notificationService;
         this.transactionRepository = transactionRepository;
         this.codeGenerator = codeGenerator;
         this.auditLogService = auditLogService;
+        this.rabbitProducerService = rabbitProducerService;
     }
 
     @Override
@@ -154,10 +155,18 @@ transactionRepository.save(transaction);
 
         requestRepository.save(request);
 
-        notificationService.createNotification(
-                request.getUser(),
-                "Withdrawal Approved",
-                "Your withdrawal request has been approved"
+        rabbitProducerService.sendNotification(
+                NotificationMessage.builder()
+                        .userId(
+                                request.getUser().getId()
+                        )
+                        .title(
+                                "Withdrawal Approved"
+                        )
+                        .content(
+                                "Your withdrawal request has been approved"
+                        )
+                        .build()
         );
 
         auditLogService.log(
@@ -197,10 +206,18 @@ transactionRepository.save(transaction);
 
         requestRepository.save(request);
 
-        notificationService.createNotification(
-                request.getUser(),
-                "Withdrawal Rejected",
-                "Your withdrawal request has been rejected"
+        rabbitProducerService.sendNotification(
+                NotificationMessage.builder()
+                        .userId(
+                                request.getUser().getId()
+                        )
+                        .title(
+                                "Withdrawal Rejected"
+                        )
+                        .content(
+                                "Your withdrawal request has been rejected"
+                        )
+                        .build()
         );
 
         auditLogService.log(

@@ -6,11 +6,12 @@ import org.springframework.dao.PessimisticLockingFailureException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.ewallet.backend.service.NotificationService;
+import com.ewallet.backend.service.RabbitProducerService;
 import com.ewallet.backend.service.SuspiciousActivityService;
 import com.ewallet.backend.service.AuditLogService;
 import com.ewallet.backend.enums.AuditAction;
 import com.ewallet.backend.exception.ResourceConflictException;
+import com.ewallet.backend.dto.message.NotificationMessage;
 import com.ewallet.backend.dto.request.DepositRequest;
 import com.ewallet.backend.dto.request.TransferRequest;
 import com.ewallet.backend.dto.request.TransferInitiateRequest;
@@ -66,15 +67,16 @@ public class WalletServiceImpl implements WalletService {
     private final CurrentUserService currentUserService;
     private final TransactionMapper transactionMapper;
     private final OtpRepository otpRepository;
-    private final NotificationService notificationService;
     private final SuspiciousActivityService suspiciousActivityService;
     private final WithdrawalRequestRepository withdrawalRequestRepository;
     private final AuditLogService auditLogService;
+    private final RabbitProducerService rabbitProducerService;
+    private final ConcurrentHashMap<String, Boolean>processingTransfers = new ConcurrentHashMap<>();
 
     private static final BigDecimal MIN_TRANSFER_AMOUNT =new BigDecimal("1.00");
     private static final BigDecimal MAX_TRANSFER_AMOUNT =new BigDecimal("5000.00");
     private static final BigDecimal WITHDRAW_APPROVAL_THRESHOLD = new BigDecimal("3000");
-    private final ConcurrentHashMap<String, Boolean>processingTransfers = new ConcurrentHashMap<>();
+    
 
 
     public WalletServiceImpl(
@@ -84,10 +86,10 @@ public class WalletServiceImpl implements WalletService {
             CurrentUserService currentUserService,
             TransactionMapper transactionMapper,
             OtpRepository otpRepository,
-            NotificationService notificationService,
             SuspiciousActivityService suspiciousActivityService,
             WithdrawalRequestRepository withdrawalRequestRepository,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService,
+        RabbitProducerService rabbitProducerService) {
 
         this.walletRepository = walletRepository;
         this.transactionRepository = transactionRepository;
@@ -95,10 +97,10 @@ public class WalletServiceImpl implements WalletService {
         this.currentUserService = currentUserService;
         this.transactionMapper = transactionMapper;
         this.otpRepository = otpRepository;
-        this.notificationService = notificationService;
         this.suspiciousActivityService = suspiciousActivityService;
         this.withdrawalRequestRepository = withdrawalRequestRepository;
         this.auditLogService = auditLogService;
+        this.rabbitProducerService = rabbitProducerService;
   
     }
 
@@ -313,22 +315,38 @@ suspiciousActivityService
                 senderWallet.getUser()
         );
 
-    notificationService.createNotification(
-        senderWallet.getUser(),
-        "Transfer Success",
-        "You transferred "
-                + request.getAmount()
-                + " VND to "
-                + receiverWallet.getUser().getPhone()
+    rabbitProducerService.sendNotification(
+        NotificationMessage.builder()
+                .userId(
+                        senderWallet.getUser().getId()
+                )
+                .title(
+                        "Transfer Success"
+                )
+                .content(
+                        "You transferred "
+                                + request.getAmount()
+                                + " VND to "
+                                + receiverWallet.getUser().getPhone()
+                )
+                .build()
 );
 
-notificationService.createNotification(
-        receiverWallet.getUser(),
-        "Money Received",
-        "You received "
-                + request.getAmount()
-                + " VND from "
-                + senderWallet.getUser().getPhone()
+rabbitProducerService.sendNotification(
+        NotificationMessage.builder()
+                .userId(
+                        receiverWallet.getUser().getId()
+                )
+                .title(
+                        "Money Received"
+                )
+                .content(
+                        "You received "
+                                + request.getAmount()
+                                + " VND from "
+                                + senderWallet.getUser().getPhone()
+                )
+                .build()
 );
 
         auditLogService.log(
@@ -390,12 +408,20 @@ finally {
                     Objects.requireNonNull(transaction)
             );
 
-            notificationService.createNotification(
-        lockedWallet.getUser(),
-        "Deposit Success",
-        "You deposited "
-                + request.getAmount()
-                + " VND"
+            rabbitProducerService.sendNotification(
+        NotificationMessage.builder()
+                .userId(
+                        lockedWallet.getUser().getId()
+                )
+                .title(
+                        "Deposit Success"
+                )
+                .content(
+                        "You deposited "
+                                + request.getAmount()
+                                + " VND"
+                )
+                .build()
 );
 
         auditLogService.log(
@@ -441,10 +467,18 @@ finally {
             Objects.requireNonNull(withdrawalRequest)
     );
 
-    notificationService.createNotification(
-        lockedWallet.getUser(),
-        "Withdrawal Request Submitted",
-        "Your withdrawal request is pending approval"
+    rabbitProducerService.sendNotification(
+        NotificationMessage.builder()
+                .userId(
+                        lockedWallet.getUser().getId()
+                )
+                .title(
+                        "Withdrawal Request Submitted"
+                )
+                .content(
+                        "Your withdrawal request is pending approval"
+                )
+                .build()
 );
 
     return TransactionResponse.builder()
@@ -484,12 +518,20 @@ finally {
                     Objects.requireNonNull(transaction)
             );
 
-            notificationService.createNotification(
-        lockedWallet.getUser(),
-        "Withdrawal Success",
-        "You withdrew "
-                + request.getAmount()
-                + " VND"
+            rabbitProducerService.sendNotification(
+        NotificationMessage.builder()
+                .userId(
+                        lockedWallet.getUser().getId()
+                )
+                .title(
+                        "Withdrawal Success"
+                )
+                .content(
+                        "You withdrew "
+                                + request.getAmount()
+                                + " VND"
+                )
+                .build()
 );
 
         auditLogService.log(
