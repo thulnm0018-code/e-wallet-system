@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import com.ewallet.backend.service.RabbitProducerService;
 import com.ewallet.backend.service.SuspiciousActivityService;
 import com.ewallet.backend.service.AuditLogService;
+import com.ewallet.backend.service.EmailService;
 import com.ewallet.backend.enums.AuditAction;
 import com.ewallet.backend.exception.ResourceConflictException;
 import com.ewallet.backend.dto.message.NotificationMessage;
@@ -72,6 +73,7 @@ public class WalletServiceImpl implements WalletService {
     private final WithdrawalRequestRepository withdrawalRequestRepository;
     private final AuditLogService auditLogService;
     private final RabbitProducerService rabbitProducerService;
+    private final EmailService emailService;
     private final ConcurrentHashMap<String, Boolean>processingTransfers = new ConcurrentHashMap<>();
 
     private static final BigDecimal MIN_TRANSFER_AMOUNT =new BigDecimal("1.00");
@@ -90,7 +92,8 @@ public class WalletServiceImpl implements WalletService {
             SuspiciousActivityService suspiciousActivityService,
             WithdrawalRequestRepository withdrawalRequestRepository,
             AuditLogService auditLogService,
-        RabbitProducerService rabbitProducerService) {
+        RabbitProducerService rabbitProducerService,
+        EmailService emailService) {
 
         this.walletRepository = walletRepository;
         this.transactionRepository = transactionRepository;
@@ -102,6 +105,7 @@ public class WalletServiceImpl implements WalletService {
         this.withdrawalRequestRepository = withdrawalRequestRepository;
         this.auditLogService = auditLogService;
         this.rabbitProducerService = rabbitProducerService;
+        this.emailService = emailService;
   
     }
 
@@ -162,8 +166,10 @@ public class WalletServiceImpl implements WalletService {
 
         otpRepository.save(Objects.requireNonNull(otp));
         
-        log.info("[TRANSFER-INITIATE] OTP saved to database for user {}", senderWallet.getUser().getPhone());
+        emailService.sendOtpEmail(
+                senderWallet.getUser().getEmail(),otpCode);
 
+        log.info("[TRANSFER-INITIATE] OTP saved to database for user {}", senderWallet.getUser().getPhone());
         log.info("==========================================");
         log.info("MA OTP CHUYEN TIEN CHO [{}]: {}", senderWallet.getUser().getPhone(), otpCode);
         log.info("SO TIEN: {}", request.getAmount());
@@ -172,7 +178,7 @@ public class WalletServiceImpl implements WalletService {
         log.info("==========================================");
 
         TransferOtpResponse response = TransferOtpResponse.builder()
-                .message("OTP generated successfully. Check console for OTP code.")
+                .message("OTP generated successfully. OTP has been sent to your registered email.")
                 .receiverName(receiverWalletTemp.getUser().getName())
                 .receiverPhone(receiverPhone)
                 .amount(request.getAmount().toString())

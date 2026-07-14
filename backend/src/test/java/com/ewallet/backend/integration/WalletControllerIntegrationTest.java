@@ -2,6 +2,7 @@ package com.ewallet.backend.integration;
 
 import com.ewallet.backend.BackendApplication;
 import com.ewallet.backend.dto.request.TransferRequest;
+import com.ewallet.backend.dto.request.WithdrawRequest;
 import com.ewallet.backend.entity.Otp;
 import com.ewallet.backend.entity.Transaction;
 import com.ewallet.backend.entity.User;
@@ -14,6 +15,7 @@ import com.ewallet.backend.repository.OtpRepository;
 import com.ewallet.backend.repository.TransactionRepository;
 import com.ewallet.backend.repository.UserRepository;
 import com.ewallet.backend.repository.WalletRepository;
+import com.ewallet.backend.repository.WithdrawalRequestRepository;
 import com.ewallet.backend.security.jwt.JwtTokenProvider;
 import com.ewallet.backend.util.PhoneUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -60,6 +63,9 @@ class WalletControllerIntegrationTest {
     private TransactionRepository transactionRepository;
 
     @Autowired
+    private WithdrawalRequestRepository withdrawalRequestRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Autowired
@@ -74,9 +80,11 @@ class WalletControllerIntegrationTest {
     @SuppressWarnings("null")
     @BeforeEach
     void setUp() {
-        userRepository.deleteAll();
-        walletRepository.deleteAll();
+        transactionRepository.deleteAll();
+        withdrawalRequestRepository.deleteAll();
         otpRepository.deleteAll();
+        walletRepository.deleteAll();
+        userRepository.deleteAll();
 
         String senderPhone = PhoneUtils.normalize("0987654323");
         String receiverPhone = PhoneUtils.normalize("0987654324");
@@ -158,8 +166,134 @@ class WalletControllerIntegrationTest {
         Wallet updatedSender = walletRepository.findByUser_Id(sender.getId()).orElseThrow();
         Wallet updatedReceiver = walletRepository.findByUser_Id(receiver.getId()).orElseThrow();
 
-        org.assertj.core.api.Assertions.assertThat(updatedSender.getBalance()).isEqualByComparingTo(new BigDecimal("90.00"));
-        org.assertj.core.api.Assertions.assertThat(updatedReceiver.getBalance()).isEqualByComparingTo(new BigDecimal("60.00"));
+       assertThat(updatedSender.getBalance())
+        .isEqualByComparingTo(
+                new BigDecimal("90.00")
+        );
+
+        assertThat(updatedReceiver.getBalance())
+        .isEqualByComparingTo(
+                new BigDecimal("60.00")
+        );
+       Transaction transaction =
+        transactionRepository
+                .findAll()
+                .getFirst();
+
+assertThat(
+        transaction.getType()
+).isEqualTo(
+        TransactionType.TRANSFER
+);
+
+assertThat(
+        transaction.getStatus()
+).isEqualTo(
+        TransactionStatus.SUCCESS
+);
+    }
+
+    @SuppressWarnings("null")
+    @Test
+    void transfer_shouldFailWhenOtpInvalid() throws Exception {
+        User sender = userRepository.findByEmailAndDeletedFalse("sender@example.com").orElseThrow();
+        Otp otp = Otp.builder()
+                .user(sender)
+                .otpCode("123456")
+                .verified(false)
+                .expiredAt(LocalDateTime.now().plusMinutes(5))
+                .amount(new BigDecimal("10.00"))
+                .receiverPhone(PhoneUtils.normalize("0987654324"))
+                .build();
+        otpRepository.save(otp);
+
+        TransferRequest request = new TransferRequest();
+        request.setReceiverPhone("0987654324");
+        request.setAmount(new BigDecimal("10.00"));
+        request.setOtpCode("999999");
+        request.setMessage("Invalid OTP test");
+
+        mockMvc.perform(post("/api/v1/wallets/transfer")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @SuppressWarnings("null")
+    @Test
+    void transfer_shouldFailWhenOtpExpired() throws Exception {
+        User sender = userRepository.findByEmailAndDeletedFalse("sender@example.com").orElseThrow();
+        Otp otp = Otp.builder()
+                .user(sender)
+                .otpCode("123456")
+                .verified(false)
+                .expiredAt(LocalDateTime.now().minusMinutes(5))
+                .amount(new BigDecimal("10.00"))
+                .receiverPhone(PhoneUtils.normalize("0987654324"))
+                .build();
+        otpRepository.save(otp);
+
+        TransferRequest request = new TransferRequest();
+        request.setReceiverPhone("0987654324");
+        request.setAmount(new BigDecimal("10.00"));
+        request.setOtpCode("123456");
+        request.setMessage("Expired OTP test");
+
+        mockMvc.perform(post("/api/v1/wallets/transfer")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @SuppressWarnings("null")
+    @Test
+    void transfer_shouldFailWhenBalanceInsufficient() throws Exception {
+        User sender = userRepository.findByEmailAndDeletedFalse("sender@example.com").orElseThrow();
+        Otp otp = Otp.builder()
+                .user(sender)
+                .otpCode("123456")
+                .verified(false)
+                .expiredAt(LocalDateTime.now().plusMinutes(5))
+                .amount(new BigDecimal("500.00"))
+                .receiverPhone(PhoneUtils.normalize("0987654324"))
+                .build();
+        otpRepository.save(otp);
+
+        TransferRequest request = new TransferRequest();
+        request.setReceiverPhone("0987654324");
+        request.setAmount(new BigDecimal("500.00"));
+        request.setOtpCode("123456");
+        request.setMessage("Insufficient balance test");
+
+        mockMvc.perform(post("/api/v1/wallets/transfer")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @SuppressWarnings("null")
+    @Test
+    void withdraw_shouldCreatePendingWithdrawalForAmountAboveThreshold() throws Exception {
+        senderWallet.setBalance(new BigDecimal("10000.00"));
+        walletRepository.save(senderWallet);
+
+        WithdrawRequest request = new WithdrawRequest();
+        request.setAmount(new BigDecimal("5000.00"));
+        request.setMessage("Withdraw request test");
+
+        mockMvc.perform(post("/api/v1/wallets/withdraw")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
+                .andExpect(jsonPath("$.data.type").value("WITHDRAW"))
+                .andExpect(jsonPath("$.data.amount").value(5000.00));
+
+        assertThat(withdrawalRequestRepository.count()).isEqualTo(1);
     }
 
     @SuppressWarnings("null")
@@ -183,4 +317,59 @@ class WalletControllerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1));
     }
+
+    @SuppressWarnings("null")
+    @Test
+    void withdraw_shouldSucceedForAmountBelowThreshold() throws Exception {
+
+        senderWallet.setBalance(new BigDecimal("1000.00"));
+        walletRepository.save(senderWallet);
+
+        WithdrawRequest request = new WithdrawRequest();
+        request.setAmount(new BigDecimal("100.00"));
+        request.setMessage("Withdraw test");
+
+        mockMvc.perform(post("/api/v1/wallets/withdraw")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.type").value("WITHDRAW"));
+
+        Wallet updatedWallet = walletRepository.findByUser_Id(sender.getId()).orElseThrow();
+
+                assertThat(updatedWallet.getBalance())
+                .isEqualByComparingTo(new BigDecimal("900.00"));
+
+                 Transaction transaction =
+            transactionRepository
+                    .findAll()
+                    .getFirst();
+
+    assertThat(transaction.getType())
+            .isEqualTo(TransactionType.WITHDRAW);
+
+    assertThat(transaction.getStatus())
+            .isEqualTo(TransactionStatus.SUCCESS);
+    }
+
+    @SuppressWarnings("null")
+    @Test
+    void withdraw_shouldFailWhenBalanceInsufficient() throws Exception {
+        senderWallet.setBalance(new BigDecimal("50.00"));
+        walletRepository.save(senderWallet);
+
+        WithdrawRequest request = new WithdrawRequest();
+        request.setAmount(new BigDecimal("100.00"));
+        request.setMessage("Withdraw test");
+
+        mockMvc.perform(post("/api/v1/wallets/withdraw")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
 }
+
+          

@@ -5,11 +5,18 @@ import com.ewallet.backend.entity.User;
 import com.ewallet.backend.repository.UserRepository;
 import com.ewallet.backend.service.NotificationService;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
 @Component
 public class NotificationConsumer {
+
+    private static final Logger log =
+            LoggerFactory.getLogger(
+                    NotificationConsumer.class
+            );
 
     private final NotificationService notificationService;
 
@@ -24,7 +31,7 @@ public class NotificationConsumer {
     }
 
     @SuppressWarnings("null")
-    @RabbitListener(
+@RabbitListener(
             queues = "notification.queue"
     )
     public void receive(
@@ -36,7 +43,17 @@ public class NotificationConsumer {
                         .findById(
                                 message.getUserId()
                         )
-                        .orElseThrow();
+                        .orElse(null);
+
+        if (user == null) {
+
+            log.warn(
+                    "User not found for notification. userId={}",
+                    message.getUserId()
+            );
+
+            return;
+        }
 
         notificationService.createNotification(
                 user,
