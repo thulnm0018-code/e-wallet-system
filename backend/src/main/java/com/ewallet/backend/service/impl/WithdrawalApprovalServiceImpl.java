@@ -8,12 +8,14 @@ import com.ewallet.backend.entity.Wallet;
 import com.ewallet.backend.entity.WithdrawalRequest;
 import com.ewallet.backend.enums.TransactionType;
 import com.ewallet.backend.enums.WithdrawalStatus;
+import com.ewallet.backend.enums.AuditAction;
 import com.ewallet.backend.exception.BadRequestException;
 import com.ewallet.backend.exception.NotFoundException;
 import com.ewallet.backend.repository.TransactionRepository;
 import com.ewallet.backend.repository.WalletRepository;
 import com.ewallet.backend.repository.WithdrawalRequestRepository;
 import com.ewallet.backend.service.NotificationService;
+import com.ewallet.backend.service.AuditLogService;
 import com.ewallet.backend.service.WithdrawalApprovalService;
 
 import org.springframework.stereotype.Service;
@@ -38,18 +40,22 @@ public class WithdrawalApprovalServiceImpl
 
     private final TransactionCodeGenerator codeGenerator;
 
+    private final AuditLogService auditLogService;
+
     public WithdrawalApprovalServiceImpl(
             WithdrawalRequestRepository requestRepository,
             WalletRepository walletRepository,
             NotificationService notificationService,
             TransactionRepository transactionRepository,
-            TransactionCodeGenerator codeGenerator
+            TransactionCodeGenerator codeGenerator,
+            AuditLogService auditLogService
     ) {
         this.requestRepository = requestRepository;
         this.walletRepository = walletRepository;
         this.notificationService = notificationService;
         this.transactionRepository = transactionRepository;
         this.codeGenerator = codeGenerator;
+        this.auditLogService = auditLogService;
     }
 
     @Override
@@ -153,6 +159,13 @@ transactionRepository.save(transaction);
                 "Withdrawal Approved",
                 "Your withdrawal request has been approved"
         );
+
+        auditLogService.log(
+                request.getUser(),
+                AuditAction.WITHDRAW_APPROVED,
+                "Withdrawal approved: "
+                        + request.getAmount()
+        );
     }
 
     @Override
@@ -188,6 +201,13 @@ transactionRepository.save(transaction);
                 request.getUser(),
                 "Withdrawal Rejected",
                 "Your withdrawal request has been rejected"
+        );
+
+        auditLogService.log(
+                request.getUser(),
+                AuditAction.WITHDRAW_REJECTED,
+                "Withdrawal rejected: "
+                        + request.getAmount()
         );
     }
 }

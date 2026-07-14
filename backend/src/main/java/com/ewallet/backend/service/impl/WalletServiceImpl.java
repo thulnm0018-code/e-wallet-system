@@ -8,6 +8,8 @@ import org.slf4j.LoggerFactory;
 
 import com.ewallet.backend.service.NotificationService;
 import com.ewallet.backend.service.SuspiciousActivityService;
+import com.ewallet.backend.service.AuditLogService;
+import com.ewallet.backend.enums.AuditAction;
 import com.ewallet.backend.exception.ResourceConflictException;
 import com.ewallet.backend.dto.request.DepositRequest;
 import com.ewallet.backend.dto.request.TransferRequest;
@@ -67,6 +69,7 @@ public class WalletServiceImpl implements WalletService {
     private final NotificationService notificationService;
     private final SuspiciousActivityService suspiciousActivityService;
     private final WithdrawalRequestRepository withdrawalRequestRepository;
+    private final AuditLogService auditLogService;
 
     private static final BigDecimal MIN_TRANSFER_AMOUNT =new BigDecimal("1.00");
     private static final BigDecimal MAX_TRANSFER_AMOUNT =new BigDecimal("5000.00");
@@ -83,7 +86,8 @@ public class WalletServiceImpl implements WalletService {
             OtpRepository otpRepository,
             NotificationService notificationService,
             SuspiciousActivityService suspiciousActivityService,
-            WithdrawalRequestRepository withdrawalRequestRepository) {
+            WithdrawalRequestRepository withdrawalRequestRepository,
+            AuditLogService auditLogService) {
 
         this.walletRepository = walletRepository;
         this.transactionRepository = transactionRepository;
@@ -94,6 +98,7 @@ public class WalletServiceImpl implements WalletService {
         this.notificationService = notificationService;
         this.suspiciousActivityService = suspiciousActivityService;
         this.withdrawalRequestRepository = withdrawalRequestRepository;
+        this.auditLogService = auditLogService;
   
     }
 
@@ -326,6 +331,15 @@ notificationService.createNotification(
                 + senderWallet.getUser().getPhone()
 );
 
+        auditLogService.log(
+        senderWallet.getUser(),
+        AuditAction.TRANSFER,
+        "Transferred "
+                + request.getAmount()
+                + " VND to "
+                + receiverWallet.getUser().getPhone()
+);
+
         otp.setFailedAttempts(0);
         otp.setVerified(true);
         otpRepository.save(otp);
@@ -382,6 +396,12 @@ finally {
         "You deposited "
                 + request.getAmount()
                 + " VND"
+);
+
+        auditLogService.log(
+    lockedWallet.getUser(),
+    AuditAction.DEPOSIT,
+    "Deposited " + request.getAmount()
 );
     return transactionMapper.toResponse(savedTransaction);
 }
@@ -471,6 +491,14 @@ finally {
                 + request.getAmount()
                 + " VND"
 );
+
+        auditLogService.log(
+        lockedWallet.getUser(),
+        AuditAction.WITHDRAW,
+        "Withdraw "
+                + request.getAmount()
+);
+
     return transactionMapper.toResponse(
             savedTransaction
     );
