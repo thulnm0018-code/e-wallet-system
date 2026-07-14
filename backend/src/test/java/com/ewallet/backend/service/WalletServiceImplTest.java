@@ -1,22 +1,28 @@
 package com.ewallet.backend.service;
 
+import com.ewallet.backend.dto.message.NotificationMessage;
 import com.ewallet.backend.dto.request.DepositRequest;
 import com.ewallet.backend.dto.request.TransferRequest;
+import com.ewallet.backend.dto.request.WithdrawRequest;
 import com.ewallet.backend.dto.response.TransactionResponse;
 import com.ewallet.backend.entity.Otp;
 import com.ewallet.backend.entity.Transaction;
 import com.ewallet.backend.entity.User;
 import com.ewallet.backend.entity.Wallet;
+import com.ewallet.backend.entity.WithdrawalRequest;
+import com.ewallet.backend.enums.AuditAction;
 import com.ewallet.backend.enums.TransactionStatus;
 import com.ewallet.backend.enums.TransactionType;
 import com.ewallet.backend.enums.UserStatus;
 import com.ewallet.backend.enums.WalletStatus;
 import com.ewallet.backend.exception.BadRequestException;
 import com.ewallet.backend.exception.NotFoundException;
+import com.ewallet.backend.exception.ResourceConflictException;
 import com.ewallet.backend.mapper.TransactionMapper;
 import com.ewallet.backend.repository.OtpRepository;
 import com.ewallet.backend.repository.TransactionRepository;
 import com.ewallet.backend.repository.WalletRepository;
+import com.ewallet.backend.repository.WithdrawalRequestRepository;
 import com.ewallet.backend.security.service.CurrentUserService;
 import com.ewallet.backend.service.impl.WalletServiceImpl;
 import com.ewallet.backend.util.TransactionCodeGenerator;
@@ -29,18 +35,22 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
+import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -64,6 +74,21 @@ class WalletServiceImplTest {
 
     @Mock
     private OtpRepository otpRepository;
+
+    @Mock
+    private NotificationService notificationService;
+
+    @Mock
+    private SuspiciousActivityService suspiciousActivityService;
+
+    @Mock
+    private WithdrawalRequestRepository withdrawalRequestRepository;
+
+    @Mock
+    private AuditLogService auditLogService;
+
+    @Mock
+    private RabbitProducerService rabbitProducerService;
 
     @InjectMocks
     private WalletServiceImpl walletService;
@@ -190,6 +215,30 @@ class WalletServiceImplTest {
         assertThat(receiverWallet.getBalance()).isEqualByComparingTo(new BigDecimal("75.50"));
         verify(walletRepository).saveAll(anyList());
         verify(transactionRepository).save(any(Transaction.class));
+    }
+
+    @SuppressWarnings("null")
+    @Test
+    void shouldRejectDuplicateTransferRequest() throws Exception {
+        when(currentUserService.getCurrentUserId()).thenReturn(1L);
+
+        TransferRequest request = TransferRequest.builder()
+                .receiverPhone("0987654322")
+                .amount(new BigDecimal("25.50"))
+                .otpCode("123456")
+                .message("Payment")
+                .build();
+
+        Field field = WalletServiceImpl.class.getDeclaredField("processingTransfers");
+        field.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        ConcurrentHashMap<String, Boolean> processingTransfers = (ConcurrentHashMap<String, Boolean>) field.get(walletService);
+        processingTransfers.put("1-25.50-0987654322", Boolean.TRUE);
+
+        ResourceConflictException exception = assertThrows(ResourceConflictException.class, () -> walletService.transferMoney(request));
+
+        assertEquals("Transfer already being processed", exception.getMessage());
+        verify(transactionRepository, never()).save(any(Transaction.class));
     }
 
     @SuppressWarnings("null")
@@ -399,6 +448,190 @@ class WalletServiceImplTest {
 
         assertEquals("OTP already used", exception.getMessage());
         verify(transactionRepository, never()).save(any());
+    }
+
+    @SuppressWarnings("null")
+    @Test
+    void shouldRejectExpiredOtp() {
+        Otp otp = Otp.builder()
+                .user(testUser)
+                .otpCode("123456")
+                .receiverPhone("+84987654322")
+                .amount(new BigDecimal("25.50"))
+                .verified(false)
+                .expiredAt(LocalDateTime.now().minusMinutes(1))
+                .build();
+
+        when(currentUserService.getCurrentUserId()).thenReturn(1L);
+        when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.of(testWallet));
+        when(otpRepository.findTopByUserOrderByCreatedAtDesc(testUser)).thenReturn(Optional.of(otp));
+
+        TransferRequest request = TransferRequest.builder()
+                .receiverPhone("0987654322")
+                .amount(new BigDecimal("25.50"))
+                .otpCode("123456")
+                .message("Payment")
+                .build();
+
+        BadRequestException exception = assertThrows(BadRequestException.class, () -> walletService.transferMoney(request));
+
+        assertEquals("OTP expired", exception.getMessage());
+        verify(transactionRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldLockOtpAfterFiveFailures() {
+        Otp otp = Otp.builder()
+                .user(testUser)
+                .otpCode("123456")
+                .receiverPhone("+84987654322")
+                .amount(new BigDecimal("25.50"))
+                .verified(false)
+                .failedAttempts(4)
+                .expiredAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(currentUserService.getCurrentUserId()).thenReturn(1L);
+        when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.of(testWallet));
+        when(otpRepository.findTopByUserOrderByCreatedAtDesc(testUser)).thenReturn(Optional.of(otp));
+
+        TransferRequest request = TransferRequest.builder()
+                .receiverPhone("0987654322")
+                .amount(new BigDecimal("25.50"))
+                .otpCode("654321")
+                .message("Payment")
+                .build();
+
+        BadRequestException exception = assertThrows(BadRequestException.class, () -> walletService.transferMoney(request));
+
+        assertEquals("OTP locked. Please request a new OTP.", exception.getMessage());
+        assertThat(otp.isVerified()).isTrue();
+        assertThat(otp.getFailedAttempts()).isEqualTo(5);
+        verify(otpRepository).save(otp);
+    }
+
+    @SuppressWarnings("null")
+    @Test
+    void shouldCreatePendingWithdrawal() {
+        testWallet.setBalance(new BigDecimal("5000.00"));
+
+        when(currentUserService.getCurrentUserId()).thenReturn(1L);
+        when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.of(testWallet));
+        when(walletRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(testWallet));
+
+        WithdrawRequest request = new WithdrawRequest();
+        request.setAmount(new BigDecimal("3500.00"));
+        request.setMessage("Pending withdrawal");
+
+        TransactionResponse response = walletService.withdrawMoney(request);
+
+        assertThat(response.getStatus()).isEqualTo(TransactionStatus.PENDING);
+        assertThat(response.getAmount()).isEqualByComparingTo(new BigDecimal("3500.00"));
+        verify(withdrawalRequestRepository).save(any(WithdrawalRequest.class));
+    }
+
+    @SuppressWarnings("null")
+    @Test
+    void shouldCreateAuditLogAfterTransfer() {
+        User receiverUser = new User();
+        receiverUser.setId(2L);
+        receiverUser.setPhone("0987654322");
+        receiverUser.setName("Receiver User");
+        receiverUser.setUserStatus(UserStatus.ACTIVE);
+
+        Wallet receiverWallet = Wallet.builder()
+                .id(20L)
+                .user(receiverUser)
+                .balance(new BigDecimal("50.00"))
+                .walletStatus(WalletStatus.ACTIVE)
+                .build();
+
+        Otp otp = Otp.builder()
+                .user(testUser)
+                .otpCode("123456")
+                .receiverPhone("+84987654322")
+                .amount(new BigDecimal("25.50"))
+                .verified(false)
+                .expiredAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(currentUserService.getCurrentUserId()).thenReturn(1L);
+        when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.of(testWallet));
+        when(otpRepository.findTopByUserOrderByCreatedAtDesc(testUser)).thenReturn(Optional.of(otp));
+        when(walletRepository.findByUser_Phone("+84987654322")).thenReturn(Optional.of(receiverWallet));
+        when(walletRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(testWallet));
+        when(walletRepository.findByIdForUpdate(20L)).thenReturn(Optional.of(receiverWallet));
+        when(codeGenerator.generate()).thenReturn("TXN-999");
+        when(transactionRepository.save(any(Transaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(transactionMapper.toResponse(any(Transaction.class))).thenReturn(TransactionResponse.builder()
+                .transactionCode("TXN-999")
+                .amount(new BigDecimal("25.50"))
+                .status(TransactionStatus.SUCCESS)
+                .type(TransactionType.TRANSFER)
+                .build());
+
+        TransferRequest request = TransferRequest.builder()
+                .receiverPhone("0987654322")
+                .amount(new BigDecimal("25.50"))
+                .otpCode("123456")
+                .message("Payment")
+                .build();
+
+        walletService.transferMoney(request);
+
+        verify(auditLogService).log(eq(testUser), eq(AuditAction.TRANSFER), anyString());
+    }
+
+    @SuppressWarnings("null")
+    @Test
+    void shouldSendRabbitNotificationAfterTransfer() {
+        User receiverUser = new User();
+        receiverUser.setId(2L);
+        receiverUser.setPhone("0987654322");
+        receiverUser.setName("Receiver User");
+        receiverUser.setUserStatus(UserStatus.ACTIVE);
+
+        Wallet receiverWallet = Wallet.builder()
+                .id(20L)
+                .user(receiverUser)
+                .balance(new BigDecimal("50.00"))
+                .walletStatus(WalletStatus.ACTIVE)
+                .build();
+
+        Otp otp = Otp.builder()
+                .user(testUser)
+                .otpCode("123456")
+                .receiverPhone("+84987654322")
+                .amount(new BigDecimal("25.50"))
+                .verified(false)
+                .expiredAt(LocalDateTime.now().plusMinutes(5))
+                .build();
+
+        when(currentUserService.getCurrentUserId()).thenReturn(1L);
+        when(walletRepository.findByUser_Id(1L)).thenReturn(Optional.of(testWallet));
+        when(otpRepository.findTopByUserOrderByCreatedAtDesc(testUser)).thenReturn(Optional.of(otp));
+        when(walletRepository.findByUser_Phone("+84987654322")).thenReturn(Optional.of(receiverWallet));
+        when(walletRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(testWallet));
+        when(walletRepository.findByIdForUpdate(20L)).thenReturn(Optional.of(receiverWallet));
+        when(codeGenerator.generate()).thenReturn("TXN-998");
+        when(transactionRepository.save(any(Transaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(transactionMapper.toResponse(any(Transaction.class))).thenReturn(TransactionResponse.builder()
+                .transactionCode("TXN-998")
+                .amount(new BigDecimal("25.50"))
+                .status(TransactionStatus.SUCCESS)
+                .type(TransactionType.TRANSFER)
+                .build());
+
+        TransferRequest request = TransferRequest.builder()
+                .receiverPhone("0987654322")
+                .amount(new BigDecimal("25.50"))
+                .otpCode("123456")
+                .message("Payment")
+                .build();
+
+        walletService.transferMoney(request);
+
+        verify(rabbitProducerService, times(2)).sendNotification(any(NotificationMessage.class));
     }
 
     @SuppressWarnings("null")
