@@ -84,6 +84,15 @@ private String idempotencyKey;
     @Column(length = 255)
     private String message;
 
+    @Column(name = "payment_method", length = 100)
+    private String paymentMethod;
+
+    @Column(name = "approved_by")
+    private Long approvedBy;
+
+    @Column(name = "approved_at")
+    private LocalDateTime approvedAt;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private TransactionStatus status;

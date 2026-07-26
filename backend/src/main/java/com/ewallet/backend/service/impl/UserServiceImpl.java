@@ -80,16 +80,20 @@ public class UserServiceImpl implements UserService {
         this.walletRepository = walletRepository;
         this.transactionRepository = transactionRepository;
         this.currentUserService = currentUserService;
-        this.avatarRootLocation = Paths.get(uploadDir);
+        String dir = uploadDir;
+        if (dir == null || dir.isBlank()) {
+            dir = System.getProperty("java.io.tmpdir") + "/avatars";
+        }
+        this.avatarRootLocation = Paths.get(dir);
 
-    try {
+        try {
             Files.createDirectories(this.avatarRootLocation);
-} catch (IOException e) {
-    throw new RuntimeException(
-            "Could not initialize avatar storage",
-            e
-    );
-}
+        } catch (IOException e) {
+            throw new RuntimeException(
+                    "Could not initialize avatar storage",
+                    e
+            );
+        }
 }                          
 
     @Override
@@ -168,6 +172,15 @@ public void unlockUser(Long id) {
         user.setUserStatus(UserStatus.PENDING_VERIFICATION);
 
         User savedUser = userRepository.save(user);
+
+        Wallet wallet = Wallet.builder()
+                .user(savedUser)
+                .balance(BigDecimal.ZERO)
+                .walletStatus(WalletStatus.ACTIVE)
+                .build();
+        walletRepository.save(Objects.requireNonNull(wallet));
+        savedUser.setWallet(wallet);
+        userRepository.save(savedUser);
 
         String otpCode = OtpUtils.generateOtp();
 
@@ -267,7 +280,8 @@ Long userId = Objects.requireNonNull(
 );
 
 User user = userRepository.findByIdAndDeletedFalse(userId)
-        .orElseThrow(() -> new NotFoundException("User not found"));
+    .or(() -> userRepository.findById(userId))
+    .orElseThrow(() -> new NotFoundException("User not found"));
         String normalizedCurrentPassword = currentPassword == null ? "" : currentPassword;
         String normalizedNewPassword = newPassword == null ? "" : newPassword;
 
@@ -322,6 +336,8 @@ User user = userRepository.findByIdAndDeletedFalse(userId)
         user.setName(name);
         user.setEmail(email);
         user.setPhone(phone);
+        user.setAddress(StringUtils.hasText(request.getAddress()) ? request.getAddress().trim() : null);
+        user.setDateOfBirth(request.getDateOfBirth());
         user.setUpdatedAt(LocalDateTime.now());
         return UserResponse.fromEntity(userRepository.save(user));
     }
@@ -370,7 +386,7 @@ User user = userRepository.findByIdAndDeletedFalse(userId)
     private User resolveUserByIdentifier(String identifier) {
         String normalizedIdentifier = normalizeIdentifier(identifier);
 
-        if (normalizedIdentifier.matches("^[A-Za-z0-9+_.-]+@(.+)$")) {
+        if (normalizedIdentifier.contains("@")) {
     return userRepository
             .findByEmailAndDeletedFalse(
                     normalizedIdentifier.toLowerCase(Locale.ROOT))

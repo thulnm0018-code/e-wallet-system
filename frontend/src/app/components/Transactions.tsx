@@ -41,6 +41,17 @@ export function Transactions() {
     return 'GENERAL LEDGER';
   };
 
+  const formatTransactionReference = (transaction: Transaction) => {
+    if (transaction.referenceCode) {
+      return transaction.referenceCode;
+    }
+    const parsedId = Number(transaction.id);
+    if (!Number.isNaN(parsedId)) {
+      return `TXN-${(parsedId % 9000 + 1000).toString().padStart(4, '0')}`;
+    }
+    return transaction.id;
+  };
+
   // 1. Filter Transactions dynamically in real-time
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
@@ -50,10 +61,11 @@ export function Transactions() {
         const matchesSender = t.sender?.toLowerCase().includes(query);
         const matchesRecipient = t.recipient?.toLowerCase().includes(query);
         const matchesMessage = t.message?.toLowerCase().includes(query);
+        const matchesReference = t.referenceCode?.toLowerCase().includes(query);
         const matchesId = t.id.toLowerCase().includes(query);
         const matchesAmount = t.amount.toFixed(2).includes(query);
         
-        if (!matchesSender && !matchesRecipient && !matchesMessage && !matchesId && !matchesAmount) {
+        if (!matchesSender && !matchesRecipient && !matchesMessage && !matchesReference && !matchesId && !matchesAmount) {
           return false;
         }
       }
@@ -345,7 +357,7 @@ export function Transactions() {
                     )}
                   </div>
                   <span className="md:hidden text-[11px] uppercase tracking-wider font-bold text-medium-concrete font-mono">
-                    ID: #{transaction.id}
+                    REF: {formatTransactionReference(transaction)}
                   </span>
                 </div>
 
@@ -357,7 +369,7 @@ export function Transactions() {
                   <div className="flex flex-wrap gap-2 items-center text-[11px] uppercase tracking-wider text-charcoal-black/50">
                     <span className="font-semibold">{category}</span>
                     <span className="w-1.5 h-1.5 bg-grid-line rounded-none" />
-                    <span className="font-mono">ID: #{transaction.id}</span>
+                    <span className="font-mono">REF: {formatTransactionReference(transaction)}</span>
                   </div>
                 </div>
 
@@ -490,8 +502,8 @@ export function Transactions() {
                 <span className="text-[11px] uppercase tracking-[0.2em] text-medium-concrete font-bold block">TECHNICAL SPECIFICATION</span>
                 <div className="border border-grid-line bg-stone-white divide-y divide-grid-line rounded-none text-[12px]">
                   <div className="grid grid-cols-[140px_1fr] p-3.5 gap-4">
-                    <span className="uppercase text-medium-concrete tracking-wider font-medium">RECORD INDEX</span>
-                    <span className="font-mono text-charcoal-black font-bold uppercase truncate">#{selectedTransaction.id}</span>
+                    <span className="uppercase text-medium-concrete tracking-wider font-medium">REFERENCE CODE</span>
+                    <span className="font-mono text-charcoal-black font-bold uppercase truncate">{formatTransactionReference(selectedTransaction)}</span>
                   </div>
                   <div className="grid grid-cols-[140px_1fr] p-3.5 gap-4">
                     <span className="uppercase text-medium-concrete tracking-wider font-medium">SETTLEMENT TYPE</span>
@@ -526,7 +538,7 @@ export function Transactions() {
                   <div className="grid grid-cols-[140px_1fr] p-3.5 gap-4">
                     <span className="uppercase text-medium-concrete tracking-wider font-medium">REFERENCE CODE</span>
                     <span className="font-mono text-charcoal-black font-bold text-medium-concrete">
-                      TXN-E-{(Number(selectedTransaction.id) % 9000 + 1000)}-Z
+                      {formatTransactionReference(selectedTransaction)}
                     </span>
                   </div>
                 </div>
@@ -573,8 +585,8 @@ export function Transactions() {
               <table className="w-full text-left font-mono text-[13px] border-collapse">
                 <tbody>
                   <tr className="border-b border-dashed border-charcoal-black/30">
-                    <td className="py-2.5 font-bold uppercase">RECORD INDEX:</td>
-                    <td className="py-2.5 text-right uppercase">#{selectedTransaction.id}</td>
+                    <td className="py-2.5 font-bold uppercase">REFERENCE CODE:</td>
+                    <td className="py-2.5 text-right uppercase">{formatTransactionReference(selectedTransaction)}</td>
                   </tr>
                   <tr className="border-b border-dashed border-charcoal-black/30">
                     <td className="py-2.5 font-bold uppercase">TIMESTAMP:</td>
@@ -598,7 +610,7 @@ export function Transactions() {
                   </tr>
                   <tr>
                     <td className="py-2.5 font-bold uppercase">REF CODE:</td>
-                    <td className="py-2.5 text-right uppercase">TXN-E-{(Number(selectedTransaction.id) % 9000 + 1000)}-Z</td>
+                    <td className="py-2.5 text-right uppercase">{formatTransactionReference(selectedTransaction)}</td>
                   </tr>
                 </tbody>
               </table>

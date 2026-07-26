@@ -23,4 +23,6 @@ public interface AdminService {
 
     void deleteUser(Long userId);
     void restoreUser(Long userId);
+    void approveDepositRequest(Long transactionId);
+    void rejectDepositRequest(Long transactionId);
 }

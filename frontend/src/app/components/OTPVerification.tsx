@@ -12,7 +12,7 @@ export function OTPVerification() {
   const [expired, setExpired] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  const maskedEmail = '***lo@w****t.com';
+  const maskedIdentifier = '***lo@w****t.com';
 
   useEffect(() => {
     if (timeLeft <= 0) {
@@ -111,8 +111,8 @@ export function OTPVerification() {
 
           <form onSubmit={handleSubmit} className="grid gap-8">
             <div className="text-center space-y-1">
-              <p className="text-[12px] uppercase tracking-[0.28em] text-medium-concrete">Code sent to</p>
-              <p className="text-[14px] tracking-[0.15em] font-medium text-charcoal-black">{maskedEmail}</p>
+              <p className="text-[12px] uppercase tracking-[0.28em] text-medium-concrete">Verification target</p>
+              <p className="text-[14px] tracking-[0.15em] font-medium text-charcoal-black">{maskedIdentifier}</p>
             </div>
 
             {!expired ? (

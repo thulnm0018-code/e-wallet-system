@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.UUID;
 
 @Component
 public class JwtTokenProvider {
@@ -60,6 +61,7 @@ public class JwtTokenProvider {
     return Jwts.builder()
             .subject(user.getId().toString())
             .claim("token_type", "REFRESH")
+            .claim("jti", UUID.randomUUID().toString())
             .issuer("ewallet")
             .audience().add("ewallet-client").and()
             .issuedAt(now)

@@ -13,17 +13,34 @@ interface ApiResponse<T> {
 
 interface UserData {
   id: number;
+  walletId?: string;
   name: string;
   email: string;
   phone: string;
   role: string;
-  createdAt: string;
+  createdAt?: string;
+  address?: string;
+  dateOfBirth?: string | null;
+  avatarUrl?: string;
 }
 
 interface LoginData {
   expiresIn: number;
   user: UserData;
 }
+
+const unwrapApiData = <T,>(payload: any): T | null => {
+  if (!payload) return null;
+  return payload?.data?.data ?? payload?.data ?? payload ?? null;
+};
+
+const normalizeRole = (role?: string) => {
+  const normalized = role?.toUpperCase();
+  if (normalized === 'ADMIN' || normalized === 'ROLE_ADMIN') {
+    return 'admin';
+  }
+  return 'user';
+};
 
 export function Login() {
   const [phone, setPhone] = useState('');
@@ -50,7 +67,7 @@ export function Login() {
     const checkAuth = async () => {
       try {
         const response = (await api.get('/auth/me')) as ApiResponse<UserData>;
-        const user = response.data;
+        const user = unwrapApiData<UserData>(response);
 
         if (!user) {
           return;
@@ -60,14 +77,14 @@ export function Login() {
           name: user.name,
           phone: user.phone,
           email: user.email,
-          role: user.role === 'ADMIN' ? 'admin' : 'user',
-          walletId: user.id.toString(),
+          role: normalizeRole(user.role),
+          walletId: user.walletId?.toString() || user.id?.toString(),
           accountType: 'STANDARD',
           walletStatus: 'ACTIVE',
           memberSince: user.createdAt
         });
 
-        if (user.role === 'ADMIN') {
+        if (normalizeRole(user.role) === 'admin') {
           navigate('/admin', { replace: true });
         } else {
           navigate('/dashboard', { replace: true });
@@ -119,7 +136,7 @@ export function Login() {
         password
       })) as ApiResponse<LoginData>;
 
-      const authData = response.data;
+      const authData = unwrapApiData<LoginData>(response);
 
       if (!authData?.user) {
         throw new Error('Invalid login response');
@@ -131,18 +148,36 @@ export function Login() {
         name: user.name,
         phone: user.phone,
         email: user.email,
-        role: user.role === 'ADMIN' ? 'admin' : 'user',
-        walletId: user.id.toString(),
+        role: normalizeRole(user.role),
+        walletId: user.walletId?.toString(),
         accountType: 'STANDARD',
         walletStatus: 'ACTIVE',
         memberSince: user.createdAt
       });
 
+      const refreshedUser = await api.get('/auth/me');
+      const userData = unwrapApiData<UserData>(refreshedUser);
+      if (userData) {
+        login({
+          name: userData.name,
+          phone: userData.phone,
+          email: userData.email,
+          role: normalizeRole(userData.role),
+          walletId: userData.walletId?.toString() || userData.id?.toString(),
+          accountType: 'STANDARD',
+          walletStatus: 'ACTIVE',
+          memberSince: userData.createdAt || undefined,
+          address: userData.address || undefined,
+          dateOfBirth: userData.dateOfBirth || null,
+          avatarUrl: userData.avatarUrl || undefined,
+        });
+      }
+
       setPhone('');
       setPassword('');
       setFormMessage('');
 
-      if (user.role === 'ADMIN') {
+      if (normalizeRole(user.role) === 'admin') {
         navigate('/admin', { replace: true });
       } else {
         navigate('/dashboard', { replace: true });

@@ -7,10 +7,10 @@ import com.ewallet.backend.enums.AuditAction;
 import com.ewallet.backend.repository.AuditLogRepository;
 import com.ewallet.backend.service.AuditLogService;
 
-import java.util.List;
-
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 @Service
 public class AuditLogServiceImpl
         implements AuditLogService {
@@ -40,11 +40,12 @@ public class AuditLogServiceImpl
         );
     }
 
-    @Override
+   @Override
+@Transactional(readOnly = true)
 public List<AuditLogResponse> getAllLogs() {
 
     return repository
-            .findAllByOrderByCreatedAtDesc()
+            .findAllWithUser()
             .stream()
             .map(log ->
                     AuditLogResponse.builder()

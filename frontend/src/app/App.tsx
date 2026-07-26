@@ -13,6 +13,7 @@ import { ForgotPassword } from './components/ForgotPassword';
 import { ResetPassword } from './components/ResetPassword';
 import { Profile } from './components/Profile';
 import { AdminDashboard } from './components/AdminDashboard';
+import { Notifications } from './components/Notifications';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 function AppContent() {
@@ -38,6 +39,9 @@ function AppContent() {
         <Route path="/reset-password" element={<GuestRoute><ResetPassword /></GuestRoute>} />
         
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+        <Route path="/notification" element={<Navigate to="/notifications" replace />} />
+        <Route path="/notificaiton" element={<Navigate to="/notifications" replace />} />
         <Route path="/admin" element={<RequireAdmin><AdminDashboard /></RequireAdmin>} />
       </Routes>
     </div>
@@ -111,12 +115,15 @@ function RequireAdmin({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+import { Toaster } from 'sonner';
+
 export default function App() {
   return (
     <AuthProvider>
       <WalletProvider>
         <BrowserRouter>
           <AppContent />
+          <Toaster richColors position="top-right" />
         </BrowserRouter>
       </WalletProvider>
     </AuthProvider>

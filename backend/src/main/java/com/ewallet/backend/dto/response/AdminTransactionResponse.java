@@ -19,6 +19,9 @@ public class AdminTransactionResponse {
     private BigDecimal amount;
     private TransactionType type;
     private TransactionStatus status;
+    private String paymentMethod;
+    private Long approvedBy;
+    private LocalDateTime approvedAt;
     private LocalDateTime createdAt;
 
     public static AdminTransactionResponse fromEntity(Transaction transaction) {
@@ -32,6 +35,9 @@ public class AdminTransactionResponse {
                 .amount(transaction.getAmount())
                 .type(transaction.getType())
                 .status(transaction.getStatus())
+                .paymentMethod(transaction.getPaymentMethod())
+                .approvedBy(transaction.getApprovedBy())
+                .approvedAt(transaction.getApprovedAt())
                 .createdAt(transaction.getCreatedAt())
                 .build();
     }

@@ -104,6 +104,8 @@ class WalletServiceImplTest {
         testUser.setPhone("0987654321");
         testUser.setName("Test User");
         testUser.setUserStatus(UserStatus.ACTIVE);
+        testUser.setAddress("123 Test St");
+        testUser.setDateOfBirth(java.time.LocalDate.of(1990, 1, 1));
 
         testWallet = Wallet.builder()
                 .id(10L)

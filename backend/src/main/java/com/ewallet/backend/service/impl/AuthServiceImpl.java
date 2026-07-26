@@ -41,19 +41,22 @@ public class AuthServiceImpl implements AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final WalletRepository walletRepository;
     private final OtpRepository otpRepository;
+    private final CookieUtils cookieUtils;
 
     public AuthServiceImpl(UserRepository userRepository, 
                            RefreshTokenRepository refreshTokenRepository,
                            PasswordEncoder passwordEncoder, 
                            JwtTokenProvider jwtTokenProvider,
                            WalletRepository walletRepository,
-                           OtpRepository otpRepository) {
+                           OtpRepository otpRepository,
+                           CookieUtils cookieUtils) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
         this.walletRepository = walletRepository;
         this.otpRepository = otpRepository;
+        this.cookieUtils = cookieUtils;
     }
 
     @Override
@@ -72,7 +75,7 @@ public class AuthServiceImpl implements AuthService {
 
         User user;
 
-        boolean isEmail = input.matches("^[A-Za-z0-9+_.-]+@(.+)$");
+        boolean isEmail = input.contains("@");
 
         if (isEmail) {
             user = userRepository.findByEmailAndDeletedFalse(input.toLowerCase())
@@ -141,8 +144,8 @@ public class AuthServiceImpl implements AuthService {
 refreshTokenRepository.save(newRefreshToken);
 
 
-        CookieUtils.createCookie(response, "accessToken", newAccessToken, 900);
-        CookieUtils.createCookie(response, "refreshToken", newRefreshTokenValue, 604800);
+        cookieUtils.createCookie(response, "accessToken", newAccessToken, 900);
+        cookieUtils.createCookie(response, "refreshToken", newRefreshTokenValue, 604800);
 
         return LoginResponse.builder()
                 .expiresIn(900)
@@ -188,8 +191,8 @@ refreshTokenRepository.save(newRefreshToken);
                     });
         }
 
-        CookieUtils.clearCookie(response, "accessToken");
-        CookieUtils.clearCookie(response, "refreshToken");
+        cookieUtils.clearCookie(response, "accessToken");
+        cookieUtils.clearCookie(response, "refreshToken");
 
         SecurityContextHolder.clearContext();
     }
@@ -211,8 +214,8 @@ refreshTokenRepository.save(newRefreshToken);
 
         refreshTokenRepository.save(Objects.requireNonNull(refreshToken));
 
-        CookieUtils.createCookie(response, "accessToken", accessToken, 900);
-        CookieUtils.createCookie(response, "refreshToken", refreshTokenValue, 604800);
+        cookieUtils.createCookie(response, "accessToken", accessToken, 900);
+        cookieUtils.createCookie(response, "refreshToken", refreshTokenValue, 604800);
 
         return LoginResponse.builder()
                 .expiresIn(900)
@@ -240,7 +243,7 @@ public void verifyOtp(String phoneOrEmail, String otpCode) {
         throw new RuntimeException("Invalid OTP");
     }
 
-    boolean isEmail = input.matches("^[A-Za-z0-9+_.-]+@(.+)$");
+    boolean isEmail = input.contains("@");
     String normalizedIdentifier = input;
     if (isEmail) {
         normalizedIdentifier = input.toLowerCase();

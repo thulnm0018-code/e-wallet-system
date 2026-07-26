@@ -165,7 +165,7 @@ export function OTPModal({ isOpen, identifier, onSuccess, onClose }: OTPModalPro
 
         <form onSubmit={handleSubmit} className="grid gap-6">
           <div className="text-center space-y-1">
-            <p className="text-[12px] uppercase tracking-[0.28em] text-medium-concrete">Mã đã gửi tới</p>
+            <p className="text-[12px] uppercase tracking-[0.28em] text-medium-concrete">Mã xác thực</p>
             <p className="text-[14px] tracking-[0.15em] font-medium text-charcoal-black">{getMaskedIdentifier(identifier)}</p>
           </div>
 

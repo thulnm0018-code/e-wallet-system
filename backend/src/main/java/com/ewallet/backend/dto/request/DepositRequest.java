@@ -1,6 +1,7 @@
 package com.ewallet.backend.dto.request;
 
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
@@ -19,12 +20,15 @@ public class DepositRequest {
     )
     private BigDecimal amount;
 
+    @NotBlank(message = "Payment method is required")
+    private String paymentMethod;
+
     private String message;
 
     @Size(
-    max = 100,
-    message = "Idempotency key cannot exceed 100 characters"
-)
-private String idempotencyKey;
+            max = 100,
+            message = "Idempotency key cannot exceed 100 characters"
+    )
+    private String idempotencyKey;
 
 }

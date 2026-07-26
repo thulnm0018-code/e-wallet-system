@@ -6,6 +6,8 @@ import jakarta.validation.constraints.Pattern;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDate;
+
 @Getter
 @Setter
 public class UpdateProfileRequest {
@@ -22,4 +24,6 @@ public class UpdateProfileRequest {
     private String phone;
 
     private String address;
+
+    private LocalDate dateOfBirth;
 }

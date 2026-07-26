@@ -3,6 +3,7 @@ import { useWallet } from '../context/WalletContext';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, AlertCircle, ArrowLeft, ArrowRight, ShieldCheck, Lock } from 'lucide-react';
 import api from '../../api';
+import { useAuth } from '../context/AuthContext';
 
 interface MockReceiver {
   phone: string;
@@ -16,10 +17,12 @@ const mockReceivers: MockReceiver[] = [
   { phone: '0123456789', name: 'KAZUYO SEJIMA', walletId: 'WL-3301-4491', status: 'LOCKED' },
 ];
 
+
 type TransferStep = 'RECIPIENT' | 'AMOUNT' | 'CONFIRMATION' | 'SUCCESS';
 
 export function Send() {
   const { balance, transfer } = useWallet();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   // Step state
@@ -46,36 +49,86 @@ export function Send() {
 
   // OTP inputs ref for autofocus
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const profileComplete = Boolean(user?.address?.trim()) && Boolean(user?.dateOfBirth);
+
+  const normalizePhone = (phone?: string | null) => {
+    if (!phone) return '';
+
+    const digits = phone.replace(/\D/g, '');
+
+    if (digits.startsWith('84')) {
+      return `0${digits.slice(2)}`;
+    }
+
+    return digits;
+  };
+
+  useEffect(() => {
+    if (!profileComplete) {
+      navigate('/profile', {
+        state: {
+          profilePrompt: 'Complete your address and date of birth before sending money.'
+        }
+      });
+    }
+  }, [navigate, profileComplete]);
 
   // Auto-validate phone number as it is typed
   useEffect(() => {
     const cleanPhone = phone.replace(/\D/g, '');
-    
+    const currentUserPhone = normalizePhone(user?.phone);
+
+    console.log('INPUT PHONE:', cleanPhone);
+    console.log('USER PHONE:', user?.phone);
+    console.log('NORMALIZED USER PHONE:', currentUserPhone);
+
     if (cleanPhone.length === 10) {
+      if (cleanPhone === currentUserPhone) {
+        setValidatedReceiver(null);
+        setPhoneError('SELF_TRANSFER_NOT_ALLOWED');
+        return;
+      }
+
       const fetchReceiver = async () => {
         try {
-          const response: any = await api.get(`/users/phone/${cleanPhone}`);
-          const userData = response?.data;
-          
-          if (userData?.id) {
-            const receiverStatus = userData.userStatus === 'LOCKED' ? 'LOCKED' : 'ACTIVE';
+          const response: any = await api.get(
+  `/users/phone/${cleanPhone}`
+);
 
-            if (receiverStatus === 'LOCKED') {
-              setValidatedReceiver(null);
-              setPhoneError('RECEIVER_LOCKED');
-            } else {
-              setValidatedReceiver({
-                phone: userData.phone || cleanPhone,
-                name: userData.name || 'Unknown recipient',
-                walletId: `WL-${userData.id}`,
-                status: receiverStatus
-              });
-              setPhoneError(null);
-            }
-          } else {
-            setValidatedReceiver(null);
-            setPhoneError('NOT_FOUND');
-          }
+const responsePayload = response?.data ?? response;
+const userData = responsePayload?.data ?? responsePayload;
+console.log('receiver lookup response', response, userData);
+
+if (userData) {
+
+    const receiverStatus =
+        userData.walletStatus === 'LOCKED'
+            ? 'LOCKED'
+            : 'ACTIVE';
+
+    if (receiverStatus === 'LOCKED') {
+
+        setValidatedReceiver(null);
+        setPhoneError('RECEIVER_LOCKED');
+
+    } else {
+
+        setValidatedReceiver({
+            phone: cleanPhone,
+            name: userData.name,
+            walletId: userData.walletId ? String(userData.walletId) : 'PENDING',
+            status: receiverStatus
+        });
+
+        setPhoneError(null);
+    }
+
+} else {
+
+    setValidatedReceiver(null);
+    setPhoneError('NOT_FOUND');
+
+}
         } catch (err: any) {
           const status = err.response?.status;
 
@@ -102,7 +155,7 @@ export function Send() {
       setValidatedReceiver(null);
       setPhoneError(null);
     }
-  }, [phone]);
+  }, [phone, user?.phone]);
 
   // OTP countdown timer
   useEffect(() => {
@@ -136,7 +189,7 @@ export function Send() {
 
   // Step navigation helpers
   const handleRecipientNext = () => {
-    if (validatedReceiver) {
+    if (validatedReceiver && phoneError !== 'SELF_TRANSFER_NOT_ALLOWED') {
       setStep('AMOUNT');
     }
   };
@@ -162,6 +215,10 @@ export function Send() {
   const initiateTransfer = async () => {
     const cleanPhone = phone.replace(/\D/g, '');
     const amountNum = parseFloat(amount);
+
+    if (phoneError === 'SELF_TRANSFER_NOT_ALLOWED') {
+      return;
+    }
 
     try {
       setIsSubmitting(true);
@@ -297,11 +354,7 @@ export function Send() {
                 </div>
                 <div className="grid grid-cols-[1fr_auto] gap-y-3 text-[14px]">
                   <div className="font-semibold text-charcoal-black/60 uppercase text-[12px] tracking-wider">Name</div>
-                  <div className="font-black text-right uppercase text-charcoal-black">{validatedReceiver.name}</div>
-                  
-                  <div className="font-semibold text-charcoal-black/60 uppercase text-[12px] tracking-wider">Wallet ID</div>
-                  <div className="font-mono font-medium text-right text-charcoal-black">{validatedReceiver.walletId}</div>
-                  
+                  <div className="font-black text-right uppercase text-black">{validatedReceiver.name}</div> 
                   <div className="font-semibold text-charcoal-black/60 uppercase text-[12px] tracking-wider">Status</div>
                   <div className="font-bold text-right text-[10px] tracking-widest bg-charcoal-black text-stone-white px-2 py-0.5 uppercase border border-charcoal-black w-fit justify-self-end">
                     {validatedReceiver.status}
@@ -329,6 +382,18 @@ export function Send() {
                 </div>
                 <div className="text-[11px] leading-relaxed text-charcoal-black/60 uppercase tracking-wider">
                   The recipient's wallet has security restrictions active. Please check the address or status.
+                </div>
+              </div>
+            )}
+
+            {phoneError === 'SELF_TRANSFER_NOT_ALLOWED' && (
+              <div className="bg-concrete-gray border border-grid-line p-8 space-y-3 animate-fade-in">
+                <div className="text-[12px] uppercase tracking-[0.18em] text-charcoal-black font-bold flex items-center gap-2">
+                  <Lock className="w-4 h-4" />
+                  Self-transfer not allowed
+                </div>
+                <div className="text-[11px] leading-relaxed text-charcoal-black/60 uppercase tracking-wider">
+                  You cannot send money to your own phone number.
                 </div>
               </div>
             )}
@@ -385,7 +450,7 @@ export function Send() {
               Step 2 of 3: Transfer Amount
             </h1>
             <div className="text-[13px] tracking-[0.15em] text-charcoal-black font-semibold uppercase">
-              Send to: <span className="font-black underline">{validatedReceiver?.name}</span> ({validatedReceiver?.walletId})
+              Send to: <span className="font-black underline">{validatedReceiver?.name}</span>
             </div>
           </div>
 
@@ -513,9 +578,7 @@ export function Send() {
                   </tr>
                   <tr className="border-b border-grid-line">
                     <td className="px-6 py-4 font-semibold uppercase text-charcoal-black/60 border-r border-grid-line">Receiver</td>
-                    <td className="px-6 py-4 text-charcoal-black font-bold uppercase">
-                      {validatedReceiver?.name} ({validatedReceiver?.walletId})
-                    </td>
+                    <td className="px-6 py-4 text-charcoal-black font-bold uppercase">{validatedReceiver?.name}</td>
                   </tr>
                   <tr className="border-b border-grid-line">
                     <td className="px-6 py-4 font-semibold uppercase text-charcoal-black/60 border-r border-grid-line">Amount</td>
@@ -714,10 +777,6 @@ export function Send() {
           <div className="w-full border border-grid-line bg-concrete-gray/15">
             <table className="w-full text-[11px] uppercase tracking-[0.1em] text-left border-collapse">
               <tbody>
-                <tr className="border-b border-grid-line">
-                  <td className="px-6 py-4 font-semibold text-charcoal-black/60 w-1/3 border-r border-grid-line">Receiver Wallet</td>
-                  <td className="px-6 py-4 font-mono font-medium text-charcoal-black">{validatedReceiver?.walletId}</td>
-                </tr>
                 <tr className="border-b border-grid-line">
                   <td className="px-6 py-4 font-semibold text-charcoal-black/60 border-r border-grid-line">Timestamp</td>
                   <td className="px-6 py-4 text-charcoal-black font-medium">{txTimestamp}</td>

@@ -28,12 +28,20 @@ export function Navigation() {
           
           {/* Right side: Profile, Notifications, Logout separated by thin lines */}
           <div className="flex items-center gap-6 h-full font-medium">
-            <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/profile')}
+              className="flex items-center gap-3 hover:text-medium-concrete transition-colors duration-100 cursor-pointer"
+            >
               <span className="text-charcoal-black font-bold">{user?.name ?? 'ANDO TADAO'}</span>
-            </div>
+            </button>
             <span className="w-px h-4 bg-grid-line" aria-hidden="true" />
 
-            <button className="hover:text-medium-concrete transition-colors duration-100 cursor-pointer flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigate('/notifications')}
+              className="hover:text-medium-concrete transition-colors duration-100 cursor-pointer flex items-center gap-2"
+            >
               <Bell className="w-5 h-5" />
               <span className="text-[12px]">2</span>
             </button>

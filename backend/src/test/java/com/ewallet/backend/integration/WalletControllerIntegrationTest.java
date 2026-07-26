@@ -96,6 +96,8 @@ class WalletControllerIntegrationTest {
         sender.setPasswordHash(passwordEncoder.encode("StrongPass123"));
         sender.setRole(User.Role.USER);
         sender.setUserStatus(UserStatus.ACTIVE);
+        sender.setAddress("123 Sender St");
+        sender.setDateOfBirth(java.time.LocalDate.of(1990, 1, 1));
         sender = userRepository.save(sender);
 
         senderWallet = new Wallet();
@@ -111,6 +113,8 @@ class WalletControllerIntegrationTest {
         receiver.setPasswordHash(passwordEncoder.encode("StrongPass123"));
         receiver.setRole(User.Role.USER);
         receiver.setUserStatus(UserStatus.ACTIVE);
+        receiver.setAddress("456 Receiver St");
+        receiver.setDateOfBirth(java.time.LocalDate.of(1995, 5, 5));
         receiver = userRepository.save(receiver);
 
         receiverWallet = new Wallet();

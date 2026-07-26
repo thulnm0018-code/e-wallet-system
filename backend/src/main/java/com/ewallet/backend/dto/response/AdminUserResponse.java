@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Getter
@@ -18,6 +19,8 @@ public class AdminUserResponse {
     private String role;
     private UserStatus userStatus;
     private BigDecimal balance;
+    private String address;
+    private LocalDate dateOfBirth;
     private LocalDateTime createdAt;
 
     public static AdminUserResponse fromEntity(User user, BigDecimal balance) {
@@ -29,6 +32,8 @@ public class AdminUserResponse {
                 .role(user.getRole().name())
                 .userStatus(user.getUserStatus())
                 .balance(balance)
+                .address(user.getAddress())
+                .dateOfBirth(user.getDateOfBirth())
                 .createdAt(user.getCreatedAt())
                 .build();
     }

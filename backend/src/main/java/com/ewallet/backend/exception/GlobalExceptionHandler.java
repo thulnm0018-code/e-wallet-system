@@ -53,6 +53,20 @@ public class GlobalExceptionHandler {
                 );
         }
 
+        @ExceptionHandler(BusinessException.class)
+        public ResponseEntity<ApiResponse<Void>> handleBusinessException(
+                BusinessException ex) {
+
+        log.warn(ex.getMessage());
+
+        return ResponseEntity.badRequest()
+                .body(
+                        ApiResponse.<Void>builder()
+                                .message(ex.getMessage())
+                                .build()
+                );
+        }
+
 
         @ExceptionHandler(NotFoundException.class)
         public ResponseEntity<ApiResponse<Void>> handleNotFound(

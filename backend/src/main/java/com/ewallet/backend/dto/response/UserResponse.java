@@ -3,6 +3,7 @@ package com.ewallet.backend.dto.response;
 import com.ewallet.backend.entity.User;
 import lombok.Builder;
 import lombok.Getter;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Getter
@@ -15,6 +16,8 @@ public class UserResponse {
     private String role;
     private String userStatus;
     private String avatarUrl;
+    private String address;
+    private LocalDate dateOfBirth;
     private LocalDateTime createdAt;
 
     public static UserResponse fromEntity(User user) {  // Convert User entity to UserResponse DTO
@@ -28,6 +31,8 @@ public class UserResponse {
                 .role(user.getRole().name())
                 .userStatus(user.getUserStatus() != null ? user.getUserStatus().name() : null)
                 .avatarUrl(user.getAvatarUrl())
+                .address(user.getAddress())
+                .dateOfBirth(user.getDateOfBirth())
                 .createdAt(user.getCreatedAt())
                 .build();
     }

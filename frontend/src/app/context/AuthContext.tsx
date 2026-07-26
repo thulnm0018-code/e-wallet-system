@@ -14,6 +14,8 @@ interface User {
   memberSince?: string;
   walletStatus?: WalletStatus;
   address?: string;
+  dateOfBirth?: string | null;
+  avatarUrl?: string;
 }
 
 interface AuthContextType {
@@ -26,11 +28,52 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const unwrapApiData = <T,>(payload: any): T | null => {
+  if (!payload) return null;
+  return payload?.data?.data ?? payload?.data ?? payload ?? null;
+};
+
+const normalizeRole = (role?: string): Role => {
+  const normalized = role?.toUpperCase();
+  if (normalized === 'ADMIN' || normalized === 'ROLE_ADMIN') {
+    return 'admin';
+  }
+  return 'user';
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   const login = (u: User) => setUser(u);
+
+  const syncUserFromSession = async () => {
+    try {
+      const response: any = await api.get('/auth/me');
+      const userData = unwrapApiData<any>(response);
+
+      if (userData) {
+        setUser({
+          name: userData.name,
+          phone: userData.phone,
+          email: userData.email,
+          role: normalizeRole(userData.role),
+          walletId: userData.walletId?.toString(),
+          memberSince: userData.createdAt || undefined,
+          accountType: 'STANDARD',
+          walletStatus: 'ACTIVE',
+          address: userData.address || undefined,
+          dateOfBirth: userData.dateOfBirth || null,
+          avatarUrl: userData.avatarUrl || undefined,
+        });
+        return true;
+      }
+    } catch (error) {
+      setUser(null);
+    }
+
+    return false;
+  };
 
   const logout = async () => {
     try {
@@ -48,29 +91,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     async function restoreSession() {
-      try {
-        const response: any = await api.get('/auth/me');
-        const userData = response.data;
-
-        if (userData) {
-          setUser({
-            name: userData.name,
-            phone: userData.phone,
-            email: userData.email,
-            role: userData.role === 'ADMIN' ? 'admin' : 'user',
-            walletId: userData.id?.toString(),
-            memberSince: userData.createdAt || undefined,
-            accountType: 'STANDARD',
-            walletStatus: 'ACTIVE',
-          });
-        } else {
-          setUser(null);
-        }
-      } catch (error) {
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
+      await syncUserFromSession();
+      setLoading(false);
     }
 
     restoreSession();

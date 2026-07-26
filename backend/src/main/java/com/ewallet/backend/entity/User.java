@@ -1,5 +1,6 @@
 package com.ewallet.backend.entity;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,7 +14,6 @@ import lombok.Setter;
 @Table(name = "users")
 @Getter
 @Setter
-
 public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -61,6 +61,12 @@ public class User {
 
     @Column(length = 500)
     private String avatarUrl;
+
+    @Column(length = 255)
+    private String address;
+
+    @Column(name = "date_of_birth")
+    private LocalDate dateOfBirth;
 
     @Column(nullable = false)
     private Boolean deleted = false;

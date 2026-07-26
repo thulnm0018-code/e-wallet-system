@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Bell, CircleDot, Lock, Monitor } from 'lucide-react';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Bell, CircleDot, Lock, Monitor, Upload } from 'lucide-react';
 import api from '../../api';
 import { useAuth } from '../context/AuthContext';
+import { useWallet } from '../context/WalletContext';
 
 interface SessionRow {
   id: string;
@@ -20,7 +21,10 @@ const sessions: SessionRow[] = [
 
 export function Profile() {
   const navigate = useNavigate();
-  const { user, updateUser, logout } = useAuth();
+  const location = useLocation();
+  const { user, updateUser } = useAuth();
+  const { balance } = useWallet();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeUser = user ?? {
     name: 'ANDO TADAO',
@@ -33,12 +37,15 @@ export function Profile() {
   const [name, setName] = useState(activeUser.name);
   const [email, setEmail] = useState(activeUser.email ?? '');
   const [phone, setPhone] = useState(activeUser.phone);
-  const [dob, setDob] = useState('1992-06-18');
-  const [address, setAddress] = useState(activeUser.address ?? '13 Kiyomizu Dori, Kyoto');
+  const [dob, setDob] = useState(activeUser.dateOfBirth ?? '');
+  const [address, setAddress] = useState(activeUser.address ?? '');
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [profileMessage, setProfileMessage] = useState('');
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(activeUser.avatarUrl ?? null);
 
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(true);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -47,6 +54,8 @@ export function Profile() {
 
   const walletId = user?.walletId ?? 'WL-8819-2204';
   const accountType = user?.accountType ?? 'STANDARD';
+  const isProfileComplete = Boolean(address.trim()) && Boolean(dob);
+  const profilePrompt = (location.state as { profilePrompt?: string } | null)?.profilePrompt;
   const memberSince = user?.memberSince ?? 'JAN 2025';
   const walletStatus = user?.walletStatus ?? 'ACTIVE';
   const statusLabel = useMemo(() => {
@@ -66,8 +75,20 @@ export function Profile() {
     setName(user.name);
     setEmail(user.email ?? '');
     setPhone(user.phone);
-    setAddress(user.address ?? '13 Kiyomizu Dori, Kyoto');
+    setAddress(user.address ?? '');
+    setDob(user.dateOfBirth ?? '');
+    if (user.avatarUrl) {
+      const apiHost = (import.meta.env.VITE_API_URL ?? 'http://localhost:8080/api/v1').replace(/\/api\/v1$/, '');
+      const resolved = user.avatarUrl.startsWith('/uploads') ? `${apiHost}${user.avatarUrl}` : user.avatarUrl;
+      setAvatarPreview(resolved);
+    } else {
+      setAvatarPreview(null);
+    }
   }, [user]);
+
+  const handleAvatarButtonClick = () => {
+    fileInputRef.current?.click();
+  };
 
   const handleSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -81,14 +102,43 @@ export function Profile() {
         email,
         phone,
         address,
+        dateOfBirth: dob,
       });
-      updateUser({ name, email, phone, address });
+      updateUser({ name, email, phone, address, dateOfBirth: dob || null });
       setProfileMessage(response?.message || 'Profile updated successfully');
       window.setTimeout(() => setProfileMessage(''), 3200);
     } catch (error: any) {
       setProfileMessage(error?.response?.data?.message || 'Unable to update profile');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setUploadingAvatar(true);
+    try {
+      const response: any = await api.post('/users/avatar', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const nextAvatarUrl = response?.data?.avatarUrl;
+      if (nextAvatarUrl) {
+        const apiHost = (import.meta.env.VITE_API_URL ?? 'http://localhost:8080/api/v1').replace(/\/api\/v1$/, '');
+        const resolved = nextAvatarUrl.startsWith('/uploads') ? `${apiHost}${nextAvatarUrl}` : nextAvatarUrl;
+        updateUser({ avatarUrl: resolved });
+        setAvatarPreview(resolved);
+        setProfileMessage('Avatar uploaded successfully');
+      }
+    } catch (error: any) {
+      setProfileMessage(error?.response?.data?.message || 'Unable to upload avatar');
+    } finally {
+      setUploadingAvatar(false);
+      event.target.value = '';
     }
   };
 
@@ -145,18 +195,14 @@ export function Profile() {
               <h1 className="text-[34px] md:text-[42px] font-black uppercase tracking-[0.04em]">{activeUser.name}</h1>
             </div>
             <div className="flex flex-wrap items-center gap-3 text-[12px] uppercase tracking-[0.25em] text-charcoal-black/75">
-              <span>ID: {walletId}</span>
+              <span>{accountType} ACCOUNT</span>
             </div>
           </div>
           <div className="h-px bg-grid-line" aria-hidden="true" />
-          <div className="grid gap-3 text-[12px] uppercase tracking-[0.25em] text-medium-concrete sm:grid-cols-[1fr_auto_1fr]">
+          <div className="grid gap-3 text-[12px] uppercase tracking-[0.25em] text-medium-concrete sm:grid-cols-[1fr_auto]">
             <div className="flex items-center gap-2">
               <CircleDot className="w-3 h-3 text-charcoal-black" />
               <span>{accountType} ACCOUNT</span>
-            </div>
-            <div className="hidden sm:flex items-center justify-center gap-2">
-              <Bell className="w-3.5 h-3.5" />
-              <span>2 notifications</span>
             </div>
             <div className="flex items-center justify-end gap-2">
               <span>Member since</span>
@@ -176,7 +222,26 @@ export function Profile() {
           <aside className="space-y-6">
             <section className="border border-grid-line bg-stone-white p-8 space-y-8">
               <div className="grid gap-6">
-                <div className="w-28 h-28 bg-grid-line text-charcoal-black grid place-items-center uppercase tracking-[0.35em] text-[11px] font-bold">PHOTO</div>
+                <button
+                  type="button"
+                  onClick={handleAvatarButtonClick}
+                  className="group flex h-28 w-28 cursor-pointer items-center justify-center overflow-hidden border border-grid-line bg-grid-line text-charcoal-black uppercase tracking-[0.35em] text-[11px] font-bold"
+                >
+                  {avatarPreview ? (
+                    <img src={avatarPreview} alt="Profile avatar" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="px-4 text-center">PHOTO</span>
+                  )}
+                  <span className="sr-only">Upload profile photo</span>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={handleAvatarUpload}
+                />
+                {uploadingAvatar && <div className="text-[11px] uppercase tracking-[0.25em] text-medium-concrete">Uploading…</div>}
                 <div className="space-y-3">
                   <div className="text-[11px] uppercase tracking-[0.35em] text-medium-concrete">Full name</div>
                   <div className="text-[24px] md:text-[30px] font-black uppercase tracking-[0.03em]">{activeUser.name}</div>
@@ -201,7 +266,7 @@ export function Profile() {
             <section className="border border-grid-line bg-charcoal-black p-8 text-stone-white">
               <div className="uppercase tracking-[0.35em] text-[11px] text-stone-white/70 mb-4">Current balance</div>
               <div className="bg-[#2a2a2a] p-6">
-                <div className="text-[40px] md:text-[48px] font-black tracking-tight leading-none">$12,980</div>
+                <div className="text-[40px] md:text-[48px] font-black tracking-tight leading-none">${balance.toFixed(2)}</div>
                 <div className="mt-3 text-[11px] uppercase tracking-[0.35em] text-stone-white/70">USD</div>
               </div>
               <div className="mt-6 flex items-center justify-between border-t border-grid-line pt-5 text-[11px] uppercase tracking-[0.25em] text-stone-white/70">
@@ -221,6 +286,16 @@ export function Profile() {
                 <div className="text-[11px] uppercase tracking-[0.25em] text-charcoal-black/60">Editable</div>
               </div>
 
+              {!isProfileComplete && (
+                <div className="rounded-none border border-grid-line bg-concrete-gray/60 px-4 py-3 text-[12px] uppercase tracking-[0.25em] font-bold text-charcoal-black">
+                  Complete your address and date of birth to unlock deposits and withdrawals.
+                </div>
+              )}
+              {profilePrompt && (
+                <div className="rounded-none border border-grid-line bg-concrete-gray/60 px-4 py-3 text-[12px] uppercase tracking-[0.25em] font-bold text-charcoal-black">
+                  {profilePrompt}
+                </div>
+              )}
               <div className={`grid gap-6 ${saving ? 'opacity-80' : ''}`}>
                 {['Full Name', 'Email', 'Phone Number', 'Date of Birth', 'Address'].map((label, index) => {
                   const value =
@@ -292,94 +367,77 @@ export function Profile() {
               </div>
 
               <div className="space-y-4 text-[13px] text-charcoal-black">
-                <div className="flex items-center justify-between gap-4 border-b border-grid-line pb-4">
+                <div className="flex flex-col gap-3 border-b border-grid-line pb-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <div className="uppercase tracking-[0.25em] text-medium-concrete text-[11px]">Change Password</div>
-                    <div className="mt-2 font-bold uppercase tracking-[0.08em]">Update your login key</div>
+                    <div className="uppercase tracking-[0.25em] text-medium-concrete text-[11px]">CHANGE PASSWORD</div>
+                    <div className="mt-2 font-bold uppercase tracking-[0.08em]">Change your login password</div>
                   </div>
                   <button
                     type="button"
                     onClick={() => { setPasswordModalOpen(true); resetPasswordModal(); }}
-                    className="text-[12px] uppercase tracking-[0.28em] text-charcoal-black hover:text-medium-concrete transition-colors duration-150 focus:outline-none focus:ring-1 focus:ring-charcoal-black"
+                    className="inline-flex items-center justify-center rounded-none border border-grid-line bg-stone-white px-4 py-2 text-[11px] uppercase tracking-[0.28em] text-charcoal-black transition-colors duration-150 hover:bg-concrete-gray focus:outline-none focus:ring-1 focus:ring-charcoal-black"
                   >
-                    Change
+                    CHANGE
                   </button>
                 </div>
 
-                <div className="flex items-center justify-between gap-4 border-b border-grid-line pb-4">
+                <div className="flex flex-col gap-3 border-b border-grid-line pb-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <div className="uppercase tracking-[0.25em] text-medium-concrete text-[11px]">Enable OTP Verification</div>
-                    <div className="mt-2 font-bold uppercase tracking-[0.08em]">One-time validation</div>
+                    <div className="uppercase tracking-[0.25em] text-medium-concrete text-[11px]">TWO-FACTOR AUTHENTICATION</div>
+                    <div className="mt-2 font-bold uppercase tracking-[0.08em]">Secure your account with OTP (SMS/Email)</div>
                   </div>
                   <button
                     type="button"
-                    className="text-[12px] uppercase tracking-[0.28em] text-charcoal-black hover:text-medium-concrete transition-colors duration-150 focus:outline-none focus:ring-1 focus:ring-charcoal-black"
+                    onClick={() => setTwoFactorEnabled((prev) => !prev)}
+                    className="
+                      inline-flex items-center justify-center
+                      rounded-none
+                      border border-grid-line
+                      bg-stone-white
+                      px-4 py-2
+                      text-[11px]
+                      uppercase
+                      tracking-[0.28em]
+                      text-charcoal-black
+                      transition-colors duration-150
+                      hover:bg-concrete-gray
+                      focus:outline-none
+                      focus:ring-1
+                      focus:ring-charcoal-black
+                    "
                   >
-                    Enable
+                    {twoFactorEnabled ? 'ENABLED' : 'DISABLED'}
                   </button>
                 </div>
 
-                <div className="flex items-center justify-between gap-4 border-b border-grid-line pb-4">
+                <div className="flex flex-col gap-3 border-b border-grid-line pb-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <div className="uppercase tracking-[0.25em] text-medium-concrete text-[11px]">Two-Factor Authentication</div>
-                    <div className="mt-2 font-bold uppercase tracking-[0.08em]">Status</div>
-                  </div>
-                  <span className="font-bold uppercase">Enabled</span>
-                </div>
-
-                <div className="flex items-center justify-between gap-4 border-b border-grid-line pb-4">
-                  <div>
-                    <div className="uppercase tracking-[0.25em] text-medium-concrete text-[11px]">Active sessions</div>
-                    <div className="mt-2 font-bold uppercase tracking-[0.08em]">{sessions.length} devices</div>
-                  </div>
-                  <span className="text-[12px] uppercase tracking-[0.28em] text-charcoal-black/80">View below</span>
-                </div>
-
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <div className="uppercase tracking-[0.25em] text-medium-concrete text-[11px]">Logout all devices</div>
-                    <div className="mt-2 font-bold uppercase tracking-[0.08em]">End every session</div>
+                    <div className="uppercase tracking-[0.25em] text-medium-concrete text-[11px]">TRANSACTION PIN</div>
+                    <div className="mt-2 font-bold uppercase tracking-[0.08em]">Change your 6-digit payment PIN</div>
                   </div>
                   <button
                     type="button"
-                    className="text-[12px] uppercase tracking-[0.28em] text-charcoal-black hover:text-medium-concrete transition-colors duration-150 focus:outline-none focus:ring-1 focus:ring-charcoal-black"
+                    className="inline-flex items-center justify-center rounded-none border border-grid-line bg-stone-white px-4 py-2 text-[11px] uppercase tracking-[0.28em] text-charcoal-black transition-colors duration-150 hover:bg-concrete-gray focus:outline-none focus:ring-1 focus:ring-charcoal-black"
                   >
-                    Terminate
+                    UPDATE
+                  </button>
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="uppercase tracking-[0.25em] text-medium-concrete text-[11px]">LOGOUT ALL DEVICES</div>
+                    <div className="mt-2 font-bold uppercase tracking-[0.08em]">Log out from all other active sessions</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center rounded-none border border-grid-line bg-stone-white px-4 py-2 text-[11px] uppercase tracking-[0.28em] text-charcoal-black transition-colors duration-150 hover:bg-concrete-gray focus:outline-none focus:ring-1 focus:ring-charcoal-black"
+                  >
+                    LOG OUT
                   </button>
                 </div>
               </div>
             </section>
 
-            <section className="border border-grid-line bg-stone-white p-8 space-y-6">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="text-[11px] uppercase tracking-[0.35em] text-medium-concrete">Active session panel</div>
-                  <h2 className="mt-3 text-[24px] font-black uppercase tracking-[0.03em]">Session details</h2>
-                </div>
-                <Monitor className="w-6 h-6 text-charcoal-black" />
-              </div>
-
-              <div className="space-y-4">
-                {sessions.map((session, index) => (
-                  <div key={session.id} className={`flex flex-col gap-3 py-4 ${index < sessions.length - 1 ? 'border-b border-grid-line' : ''}`}>
-                    <div className="flex flex-wrap items-center justify-between gap-4">
-                      <div className="text-[13px] uppercase tracking-[0.22em] text-medium-concrete">{session.device}</div>
-                      <button
-                        type="button"
-                        className="text-[11px] uppercase tracking-[0.3em] text-charcoal-black hover:text-medium-concrete transition-colors duration-150 focus:outline-none focus:ring-1 focus:ring-charcoal-black"
-                      >
-                        Terminate
-                      </button>
-                    </div>
-                    <div className="grid gap-2 text-[13px] text-charcoal-black/80 sm:grid-cols-3">
-                      <span className="uppercase tracking-[0.2em]">{session.browser}</span>
-                      <span className="uppercase tracking-[0.2em]">{session.ip}</span>
-                      <span className="uppercase tracking-[0.2em]">{session.lastActive}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
           </div>
         </div>
       </div>

@@ -1,5 +1,6 @@
 package com.ewallet.backend.repository;
 
+import com.ewallet.backend.enums.TransactionStatus;
 import com.ewallet.backend.entity.Transaction;
 import com.ewallet.backend.enums.TransactionType;
 import com.ewallet.backend.repository.projection.MonthlyStatisticProjection;
@@ -10,6 +11,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -80,26 +83,50 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     """)
     List<Transaction> findAllForExport();
 
-    @Query("""
-    SELECT COALESCE(SUM(t.amount), 0)
-    FROM Transaction t
-    WHERE t.status = com.ewallet.backend.enums.TransactionStatus.SUCCESS
-    """)
-    BigDecimal getTotalTransactionVolume();
+    @Query(value = """
+        SELECT t
+        FROM Transaction t
+        LEFT JOIN FETCH t.senderWallet sw
+        LEFT JOIN FETCH sw.user
+        LEFT JOIN FETCH t.receiverWallet rw
+        LEFT JOIN FETCH rw.user
+    """,
+    countQuery = "SELECT COUNT(t) FROM Transaction t")
+    Page<Transaction> findAllWithUsers(Pageable pageable);
 
     @Query(value = """
+        SELECT t
+        FROM Transaction t
+        LEFT JOIN FETCH t.senderWallet sw
+        LEFT JOIN FETCH sw.user
+        LEFT JOIN FETCH t.receiverWallet rw
+        LEFT JOIN FETCH rw.user
+        WHERE (:status IS NULL OR t.status = :status)
+    """,
+    countQuery = "SELECT COUNT(t) FROM Transaction t WHERE (:status IS NULL OR t.status = :status)")
+    Page<Transaction> findAllWithUsersAndStatus(@Param("status") TransactionStatus status, Pageable pageable);
+
+    @Query("""
+        SELECT COUNT(t)
+        FROM Transaction t
+        WHERE t.status = com.ewallet.backend.enums.TransactionStatus.PENDING
+        AND t.type = com.ewallet.backend.enums.TransactionType.DEPOSIT_REQUEST
+    """)
+    Long countPendingDepositRequests();
+
+       @Query(value = """
     SELECT
         YEAR(created_at) AS year,
         MONTH(created_at) AS month,
         COUNT(*) AS transactionCount,
-        COALESCE(SUM(amount),0) AS totalVolume
+        COALESCE(SUM(amount), 0) AS totalVolume
     FROM transactions
     WHERE status = 'SUCCESS'
     GROUP BY YEAR(created_at), MONTH(created_at)
     ORDER BY YEAR(created_at), MONTH(created_at)
     """,
     nativeQuery = true)
-    List<MonthlyStatisticProjection> getMonthlyStatistics();
+List<MonthlyStatisticProjection> getMonthlyStatistics();
 
             @Query("""
         SELECT COALESCE(SUM(t.serviceFee), 0)
@@ -184,4 +211,20 @@ BigDecimal getRevenueByMonth(
     );
 
     Optional<Transaction>findByIdempotencyKey(String idempotencyKey);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        SELECT t
+        FROM Transaction t
+        WHERE t.id = :id
+    """)
+    Optional<Transaction> findByIdForUpdate(@Param("id") Long id);
+
+    @Query("""
+    SELECT COALESCE(SUM(t.amount), 0)
+    FROM Transaction t
+    WHERE t.status =
+    com.ewallet.backend.enums.TransactionStatus.SUCCESS
+""")
+BigDecimal getTotalTransactionVolume();
 }
