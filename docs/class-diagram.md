@@ -8,41 +8,37 @@ classDiagram
         +String phone
         +String email
         +String password
-        +String role
-        +register()
-        +login()
-        +updateProfile()
-        +changePassword()
+        +Role role
+        +UserStatus status
+        +String address
+        +LocalDate dateOfBirth
     }
 
     class Wallet {
         +Long id
         +Long userId
         +BigDecimal balance
-        +String status
-        +getBalance()
-        +deposit()
-        +withdraw()
+        +WalletStatus status
     }
 
     class Transaction {
         +Long id
-        +Long userId
-        +String type
+        +Long senderWalletId
+        +Long receiverWalletId
+        +TransactionType type
         +BigDecimal amount
-        +String status
+        +TransactionStatus status
         +String message
         +String transactionCode
-        +createTransaction()
+        +String idempotencyKey
     }
 
     class OTP {
         +Long id
-        +String identifier
+        +Long userId
         +String otpCode
-        +LocalDateTime expiry
-        +generateOTP()
-        +verifyOTP()
+        +LocalDateTime expiredAt
+        +Boolean verified
     }
 
     class Notification {
@@ -51,7 +47,7 @@ classDiagram
         +String title
         +String content
         +Boolean isRead
-        +markAsRead()
+        +LocalDateTime createdAt
     }
 
     class RefreshToken {
@@ -59,49 +55,88 @@ classDiagram
         +Long userId
         +String token
         +LocalDateTime expiry
-        +generateToken()
     }
 
     class AuditLog {
         +Long id
+        +Long userId
         +String action
-        +String actor
-        +String target
+        +String description
         +LocalDateTime createdAt
     }
 
-    class AuthController {
-        +login()
-        +register()
-        +verifyOtp()
-        +logout()
+    class LinkedBankAccount {
+        +Long id
+        +String bankName
+        +String accountNumber
+        +String accountHolderName
+        +LocalDateTime linkedAt
     }
 
-    class WalletController {
-        +transfer()
-        +deposit()
-        +withdraw()
-        +getHistory()
+    class WithdrawalRequest {
+        +Long id
+        +Long userId
+        +BigDecimal amount
+        +WithdrawalStatus status
+        +String idempotencyKey
+        +LocalDateTime createdAt
+        +LocalDateTime approvedAt
+        +LocalDateTime rejectedAt
     }
 
-    class UserController {
-        +updateProfile()
-        +changePassword()
-        +uploadAvatar()
+    class Role {
+        <<enumeration>>
+        USER
+        ADMIN
     }
 
-    class AdminController {
-        +getDashboard()
-        +manageUsers()
-        +manageTransactions()
-        +viewLogs()
+    class UserStatus {
+        <<enumeration>>
+        ACTIVE
+        LOCKED
+        PENDING
+        DELETED
+    }
+
+    class WalletStatus {
+        <<enumeration>>
+        ACTIVE
+        LOCKED
+        PENDING
+    }
+
+    class TransactionType {
+        <<enumeration>>
+        TRANSFER
+        DEPOSIT
+        WITHDRAW
+        DEPOSIT_REQUEST
+    }
+
+    class TransactionStatus {
+        <<enumeration>>
+        PENDING
+        SUCCESS
+        FAILED
+        REJECTED
+    }
+
+    class WithdrawalStatus {
+        <<enumeration>>
+        PENDING
+        APPROVED
+        REJECTED
     }
 
     User "1" --> "1" Wallet : owns
-    User "1" --> "0..*" Transaction : performs
     User "1" --> "0..*" Notification : receives
     User "1" --> "0..*" RefreshToken : has
-    User "1" --> "0..*" OTP : uses
+    User "1" --> "0..*" OTP : requests
     User "1" --> "0..*" AuditLog : triggers
+    User "1" --> "0..*" Transaction : performs
+    User "1" --> "0..*" LinkedBankAccount : links
+    User "1" --> "0..*" WithdrawalRequest : requests
 
-    Wallet "1" --> "0..*" Transaction : records
+    Wallet "1" --> "0..*" Transaction : sends
+    Wallet "1" --> "0..*" Transaction : receives
+    WithdrawalRequest "*" --> "1" User : requests
