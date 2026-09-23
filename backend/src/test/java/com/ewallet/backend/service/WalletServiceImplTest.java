@@ -214,7 +214,7 @@ class WalletServiceImplTest {
         assertThat(response.getTransactionCode()).isEqualTo("TXN-123");
         assertThat(response.getAmount()).isEqualByComparingTo(new BigDecimal("25.50"));
         assertThat(response.getReceiverPhone()).isEqualTo("0987654322");
-        assertThat(testWallet.getBalance()).isEqualByComparingTo(new BigDecimal("100.00"));
+        assertThat(testWallet.getBalance()).isEqualByComparingTo(new BigDecimal("99.95"));
         assertThat(receiverWallet.getBalance()).isEqualByComparingTo(new BigDecimal("75.50"));
         verify(walletRepository).saveAll(anyList());
         verify(transactionRepository).save(any(Transaction.class));

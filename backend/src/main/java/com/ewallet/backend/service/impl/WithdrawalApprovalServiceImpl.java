@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -30,6 +31,8 @@ import java.util.List;
 @Transactional
 public class WithdrawalApprovalServiceImpl
         implements WithdrawalApprovalService {
+
+        private static final BigDecimal WITHDRAWAL_FEE_RATE = new BigDecimal("0.005");
 
     private final WithdrawalRequestRepository requestRepository;
 
@@ -108,8 +111,13 @@ public class WithdrawalApprovalServiceImpl
                                         "Wallet not found"
                                 ));
 
+        BigDecimal withdrawalFee = request.getAmount()
+                .multiply(WITHDRAWAL_FEE_RATE)
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal totalDebit = request.getAmount().add(withdrawalFee);
+
         if (wallet.getBalance()
-                .compareTo(request.getAmount()) < 0) {
+                .compareTo(totalDebit) < 0) {
 
             throw new BadRequestException(
                     "Insufficient balance"
@@ -118,7 +126,7 @@ public class WithdrawalApprovalServiceImpl
 
         wallet.setBalance(
                 wallet.getBalance()
-                        .subtract(request.getAmount())
+                        .subtract(totalDebit)
         );
 
         walletRepository.save(wallet);
@@ -131,7 +139,7 @@ public class WithdrawalApprovalServiceImpl
                 .senderWallet(wallet)
                 .receiverWallet(null)
                 .amount(request.getAmount())
-                .serviceFee(BigDecimal.ZERO)
+                .serviceFee(withdrawalFee)
                 .message(
                         "Approved withdrawal"
                 )

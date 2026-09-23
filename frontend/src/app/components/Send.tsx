@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useWallet } from '../context/WalletContext';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle, AlertCircle, ArrowLeft, ArrowRight, ShieldCheck, Lock } from 'lucide-react';
+import { CheckCircle, AlertCircle, ArrowLeft, ArrowRight, ShieldCheck, Lock, Download, Share2, Home } from 'lucide-react';
 import api from '../../api';
 import { useAuth } from '../context/AuthContext';
 
@@ -50,6 +50,71 @@ export function Send() {
   // OTP inputs ref for autofocus
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
   const profileComplete = Boolean(user?.address?.trim()) && Boolean(user?.dateOfBirth);
+  const senderName = user?.name?.trim() || 'Current account';
+  const receiptRef = useRef<HTMLDivElement>(null);
+  const formatVnd = (value: number) => Math.round(value).toLocaleString('en-US');
+
+  const getReceiptValues = () => {
+    const transferAmount = Number(amount || 0);
+    const fee = Math.round(transferAmount * 0.002 * 100) / 100;
+
+    return {
+      transferAmount,
+      fee,
+      total: transferAmount + fee,
+    };
+  };
+
+  const escapeXml = (value: string) => value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
+  const handleSaveReceipt = () => {
+    const { transferAmount, fee, total } = getReceiptValues();
+    const receiptSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="780" viewBox="0 0 900 780">
+      <rect width="900" height="780" fill="#f7f7f4"/>
+      <rect x="50" y="40" width="800" height="700" fill="#ffffff" stroke="#d0d0ca"/>
+      <text x="90" y="105" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#202020">TRANSFER RECEIPT</text>
+      <text x="90" y="145" font-family="Arial, sans-serif" font-size="16" fill="#777">SUCCESSFULLY TRANSFERRED</text>
+      <text x="90" y="220" font-family="Arial, sans-serif" font-size="44" font-weight="700" fill="#202020">${escapeXml(formatVnd(transferAmount))} VND</text>
+      <line x1="90" y1="260" x2="810" y2="260" stroke="#d0d0ca"/>
+      <text x="90" y="315" font-family="Arial, sans-serif" font-size="16" fill="#777">SENDER</text>
+      <text x="810" y="315" text-anchor="end" font-family="Arial, sans-serif" font-size="19" font-weight="700" fill="#202020">${escapeXml(senderName)}</text>
+      <text x="90" y="365" font-family="Arial, sans-serif" font-size="16" fill="#777">RECEIVER</text>
+      <text x="810" y="365" text-anchor="end" font-family="Arial, sans-serif" font-size="19" font-weight="700" fill="#202020">${escapeXml(validatedReceiver?.name || 'Unknown')}</text>
+      <text x="90" y="415" font-family="Arial, sans-serif" font-size="16" fill="#777">SERVICE FEE</text>
+      <text x="810" y="415" text-anchor="end" font-family="Arial, sans-serif" font-size="19" fill="#202020">${escapeXml(formatVnd(fee))} VND</text>
+      <text x="90" y="465" font-family="Arial, sans-serif" font-size="16" fill="#777">TOTAL DEBITED</text>
+      <text x="810" y="465" text-anchor="end" font-family="Arial, sans-serif" font-size="19" font-weight="700" fill="#202020">${escapeXml(formatVnd(total))} VND</text>
+      <text x="90" y="530" font-family="Arial, sans-serif" font-size="16" fill="#777">REFERENCE</text>
+      <text x="810" y="530" text-anchor="end" font-family="Arial, sans-serif" font-size="17" fill="#202020">${escapeXml(txRef)}</text>
+      <text x="90" y="575" font-family="Arial, sans-serif" font-size="16" fill="#777">TIME</text>
+      <text x="810" y="575" text-anchor="end" font-family="Arial, sans-serif" font-size="17" fill="#202020">${escapeXml(txTimestamp)}</text>
+      <text x="90" y="665" font-family="Arial, sans-serif" font-size="15" fill="#777">${escapeXml(note.trim() ? `Message: ${note.trim()}` : 'No message')}</text>
+    </svg>`;
+    const blob = new Blob([receiptSvg], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${txRef || 'transfer-receipt'}.svg`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleShareReceipt = async () => {
+    const { transferAmount, total } = getReceiptValues();
+    const shareText = `Transfer successful\n${formatVnd(transferAmount)} VND to ${validatedReceiver?.name || 'recipient'}\nTotal debited: ${formatVnd(total)} VND\nReference: ${txRef}`;
+
+    if (navigator.share) {
+      await navigator.share({ title: 'Transfer receipt', text: shareText });
+      return;
+    }
+
+    await navigator.clipboard.writeText(shareText);
+  };
 
   const normalizePhone = (phone?: string | null) => {
     if (!phone) return '';
@@ -136,13 +201,8 @@ if (userData) {
             setValidatedReceiver(null);
             setPhoneError('NOT_FOUND');
           } else {
-            setValidatedReceiver({
-              phone: cleanPhone,
-              name: cleanPhone,
-              walletId: 'PENDING',
-              status: 'ACTIVE'
-            });
-            setPhoneError(null);
+            setValidatedReceiver(null);
+            setPhoneError('LOOKUP_FAILED');
           }
         }
       };
@@ -230,10 +290,9 @@ if (userData) {
 
       const otpData = response?.data;
       
-      // Show a temporary OTP message (in real implementation, backend would send SMS)
+        // The backend must deliver this OTP through a configured secure channel.
       if (otpData) {
-        // For demo: show message to check console
-        setSystemError('CHECK_CONSOLE_FOR_OTP');
+        setSystemError('OTP_DELIVERY_PENDING');
         setOtpTimeLeft(300);
         setStep('CONFIRMATION');
         setOtp(Array(6).fill(''));
@@ -398,14 +457,14 @@ if (userData) {
               </div>
             )}
 
-            {phoneError === 'VERIFICATION_UNAVAILABLE' && (
+            {phoneError === 'LOOKUP_FAILED' && (
               <div className="bg-concrete-gray border border-grid-line p-8 space-y-3 animate-fade-in">
                 <div className="text-[12px] uppercase tracking-[0.18em] text-charcoal-black font-bold flex items-center gap-2">
                   <AlertCircle className="w-4 h-4" />
                   Recipient lookup unavailable
                 </div>
                 <div className="text-[11px] leading-relaxed text-charcoal-black/60 uppercase tracking-wider">
-                  The recipient can still be sent to using the wallet transfer flow. Please continue and confirm the transfer.
+                  We could not verify this recipient. Please check your connection and try again.
                 </div>
               </div>
             )}
@@ -460,7 +519,7 @@ if (userData) {
             <div className="relative py-8 flex flex-col items-center justify-center border border-grid-line bg-concrete-gray/15 p-10 space-y-4">
               
               <div className="flex items-center justify-center w-full">
-                <span className="text-[64px] md:text-[80px] font-black text-charcoal-black/40 mr-1 select-none font-mono">$</span>
+                <span className="text-[36px] md:text-[48px] font-black text-charcoal-black/40 mr-3 select-none font-mono">VND</span>
                 <input
                   type="number"
                   step="0.01"
@@ -474,11 +533,10 @@ if (userData) {
                   className="w-full max-w-[320px] text-center text-[64px] md:text-[80px] font-black tracking-tighter bg-transparent border-0 outline-none text-charcoal-black font-mono leading-none focus:ring-0"
                   autoFocus
                 />
-                <span className="text-[18px] md:text-[24px] font-black text-charcoal-black/60 ml-2 select-none tracking-widest">USD</span>
               </div>
 
               <div className="text-[11px] tracking-[0.2em] text-medium-concrete font-bold uppercase select-none">
-                Available balance: ${balance.toFixed(2)} USD
+                Available balance: {formatVnd(balance)} VND
               </div>
             </div>
 
@@ -505,7 +563,7 @@ if (userData) {
                   Insufficient balance
                 </div>
                 <div className="text-[11px] leading-relaxed text-charcoal-black/60 uppercase tracking-wider">
-                  The requested amount of ${parseFloat(amount).toFixed(2)} USD exceeds your current wallet balance.
+                  The requested amount of {formatVnd(Number(amount || 0))} VND exceeds your current wallet balance.
                 </div>
               </div>
             )}
@@ -550,8 +608,8 @@ if (userData) {
 
   // STEP 3: TRANSFER CONFIRMATION SCREEN
   if (step === 'CONFIRMATION') {
-    const transferFee = 1.00;
     const amountVal = parseFloat(amount);
+    const transferFee = Math.round(amountVal * 0.002 * 100) / 100;
     const totalDeduction = amountVal + transferFee;
 
     return (
@@ -574,7 +632,7 @@ if (userData) {
                 <tbody>
                   <tr className="border-b border-grid-line">
                     <td className="px-6 py-4 font-semibold uppercase text-charcoal-black/60 w-1/3 border-r border-grid-line">Sender</td>
-                    <td className="px-6 py-4 font-bold text-charcoal-black uppercase">ANDO TADAO (YOU)</td>
+                    <td className="px-6 py-4 font-bold text-charcoal-black uppercase">{senderName} (YOU)</td>
                   </tr>
                   <tr className="border-b border-grid-line">
                     <td className="px-6 py-4 font-semibold uppercase text-charcoal-black/60 border-r border-grid-line">Receiver</td>
@@ -582,11 +640,11 @@ if (userData) {
                   </tr>
                   <tr className="border-b border-grid-line">
                     <td className="px-6 py-4 font-semibold uppercase text-charcoal-black/60 border-r border-grid-line">Amount</td>
-                    <td className="px-6 py-4 font-extrabold text-charcoal-black">${amountVal.toFixed(2)} USD</td>
+                    <td className="px-6 py-4 font-extrabold text-charcoal-black">{formatVnd(amountVal)} VND</td>
                   </tr>
                   <tr className="border-b border-grid-line">
                     <td className="px-6 py-4 font-semibold uppercase text-charcoal-black/60 border-r border-grid-line">System Fee</td>
-                    <td className="px-6 py-4 text-charcoal-black font-medium">${transferFee.toFixed(2)} USD</td>
+                    <td className="px-6 py-4 text-charcoal-black font-medium">{formatVnd(transferFee)} VND</td>
                   </tr>
                   {note.trim() && (
                     <tr className="border-b border-grid-line">
@@ -596,21 +654,21 @@ if (userData) {
                   )}
                   <tr className="bg-concrete-gray/40">
                     <td className="px-6 py-4 font-black uppercase text-charcoal-black border-r border-grid-line">Total Cost</td>
-                    <td className="px-6 py-4 font-black text-charcoal-black text-[14px]">${totalDeduction.toFixed(2)} USD</td>
+                    <td className="px-6 py-4 font-black text-charcoal-black text-[14px]">{formatVnd(totalDeduction)} VND</td>
                   </tr>
                 </tbody>
               </table>
             </div>
 
-            {/* OTP Console Info */}
-            {systemError === 'CHECK_CONSOLE_FOR_OTP' && (
+            {/* OTP Delivery Status */}
+            {systemError === 'OTP_DELIVERY_PENDING' && (
               <div className="bg-concrete-gray border border-grid-line p-6 space-y-4 animate-fade-in">
                 <div className="text-[12px] uppercase tracking-[0.18em] text-charcoal-black font-bold flex items-center gap-2">
                   <AlertCircle className="w-4 h-4" />
-                  Check Backend Console for OTP
+                  Secure OTP Delivery Required
                 </div>
                 <div className="text-[11px] leading-relaxed text-charcoal-black/60 uppercase tracking-wider">
-                  Your OTP code has been generated. Check the backend console output for a message starting with "MA OTP CHUYEN TIEN CHO".
+                  The transfer OTP was generated, but no secure delivery channel is configured for this environment.
                 </div>
                 <div className="text-[11px] leading-relaxed text-charcoal-black uppercase tracking-wider font-bold">
                   OTP Expires In: <span className={otpTimeLeft > 60 ? 'text-charcoal-black' : 'text-red-600'}>{Math.floor(otpTimeLeft / 60)}:{String(otpTimeLeft % 60).padStart(2, '0')}</span>
@@ -639,9 +697,6 @@ if (userData) {
                 ))}
               </div>
 
-              <div className="text-[10px] tracking-widest text-medium-concrete uppercase font-medium mt-1">
-                Pin hints: any code completes. Use <span className="font-bold font-mono">111111</span> or <span className="font-bold font-mono">999999</span> for failure demos
-              </div>
             </div>
 
             {/* Monochromatic failure states (No bright alerts) */}
@@ -702,6 +757,15 @@ if (userData) {
               </div>
             )}
 
+            {systemError === 'INVALID_OTP' && (
+              <div className="border-b border-[#8B6B6B]/40 py-4 text-center animate-fade-in">
+                <div className="text-[12px] uppercase tracking-[0.18em] text-[#8B6B6B] font-bold flex items-center justify-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  You entered the wrong password
+                </div>
+              </div>
+            )}
+
             {systemError === 'INSUFFICIENT_BALANCE' && (
               <div className="bg-concrete-gray border border-grid-line p-8 text-center space-y-2 animate-fade-in">
                 <div className="text-[12px] uppercase tracking-[0.2em] text-charcoal-black font-bold flex items-center justify-center gap-2">
@@ -740,67 +804,55 @@ if (userData) {
     );
   }
 
-  // STEP 4: TRANSFER SUCCESS SCREEN (Full-Screen Composition)
+  // STEP 4: TRANSFER SUCCESS SCREEN
   if (step === 'SUCCESS') {
+    const { transferAmount, fee, total } = getReceiptValues();
+
     return (
-      <main className="fixed inset-0 z-50 bg-stone-white text-charcoal-black flex flex-col justify-between p-8 md:p-16 animate-fade-in">
-        
-        {/* Header decoration */}
-        <div className="flex justify-between items-center text-[10px] tracking-[0.25em] uppercase font-bold text-charcoal-black/50 border-b border-grid-line pb-6">
-          <span>Receipt reference file</span>
-          <span>System verified secure</span>
-        </div>
-
-        {/* Core receipt visual composition */}
-        <div className="flex-1 flex flex-col items-center justify-center space-y-12 max-w-[650px] mx-auto w-full py-12">
-          
-          <div className="w-20 h-20 bg-charcoal-black flex items-center justify-center">
-            <CheckCircle className="w-10 h-10 text-stone-white" strokeWidth={1.5} />
+      <main className="min-h-screen bg-stone-white text-charcoal-black px-5 py-8 md:px-8 md:py-12 animate-fade-in overflow-y-auto">
+        <div className="mx-auto w-full max-w-[680px] space-y-5">
+          <div className="flex items-center justify-between border-b border-grid-line pb-4 text-[10px] tracking-[0.2em] uppercase font-bold text-charcoal-black/50">
+            <span>Transfer receipt</span>
+            <span className="flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Success</span>
           </div>
 
-          <div className="text-center space-y-4">
-            <div className="text-[12px] uppercase tracking-[0.3em] font-extrabold text-charcoal-black/50">
-              Successfully Transferred
+          <div ref={receiptRef} className="overflow-hidden border border-charcoal-black bg-stone-white shadow-[0_20px_55px_rgba(0,0,0,0.12)]">
+            <div className="flex items-start justify-between gap-6 bg-charcoal-black px-6 py-5 text-stone-white">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-stone-white/60">E-Wallet</div>
+                <div className="mt-2 text-[18px] font-black uppercase tracking-[0.12em]">Transfer receipt</div>
+              </div>
+              <div className="flex items-center gap-2 border border-stone-white/30 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em]">
+                <CheckCircle className="h-4 w-4" /> Completed
+              </div>
             </div>
-            
-            {/* Extremely bold amount display */}
-            <div className="text-[64px] md:text-[88px] font-black text-charcoal-black tracking-tighter leading-none font-mono">
-              -${parseFloat(amount).toFixed(2)}
+
+            <div className="border-b border-grid-line bg-concrete-gray/25 px-6 py-7">
+              <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-charcoal-black/55">Amount sent</div>
+              <div className="mt-2 text-[36px] font-black leading-none tracking-tight md:text-[44px]">{formatVnd(transferAmount)} <span className="text-[18px] tracking-[0.12em] text-charcoal-black/55">VND</span></div>
+              <div className="mt-3 text-[12px] uppercase tracking-[0.12em] text-charcoal-black/65">To <span className="font-black text-charcoal-black">{validatedReceiver?.name}</span></div>
             </div>
-            
-            <div className="text-[20px] font-bold text-charcoal-black tracking-wide uppercase">
-              To <span className="underline">{validatedReceiver?.name}</span>
+
+            <div className="grid grid-cols-1 gap-x-8 gap-y-5 px-6 py-6 text-[12px] sm:grid-cols-2">
+              <div><div className="text-[10px] font-bold uppercase tracking-[0.16em] text-charcoal-black/50">From</div><div className="mt-1 font-bold uppercase break-words">{senderName}</div></div>
+              <div><div className="text-[10px] font-bold uppercase tracking-[0.16em] text-charcoal-black/50">To</div><div className="mt-1 font-bold uppercase break-words">{validatedReceiver?.name}</div></div>
+              <div><div className="text-[10px] font-bold uppercase tracking-[0.16em] text-charcoal-black/50">Service fee</div><div className="mt-1 font-semibold">{formatVnd(fee)} VND</div></div>
+              <div><div className="text-[10px] font-bold uppercase tracking-[0.16em] text-charcoal-black/50">Total debited</div><div className="mt-1 font-black">{formatVnd(total)} VND</div></div>
+              {note.trim() && <div className="sm:col-span-2"><div className="text-[10px] font-bold uppercase tracking-[0.16em] text-charcoal-black/50">Message</div><div className="mt-1 break-words">{note.trim()}</div></div>}
+            </div>
+
+            <div className="flex flex-col gap-2 border-t border-dashed border-grid-line bg-concrete-gray/15 px-6 py-4 text-[10px] uppercase tracking-[0.12em] text-charcoal-black/60 sm:flex-row sm:items-center sm:justify-between">
+              <span>{txTimestamp}</span>
+              <span className="font-mono font-bold text-charcoal-black break-all">{txRef}</span>
             </div>
           </div>
 
-          {/* Receipt details list */}
-          <div className="w-full border border-grid-line bg-concrete-gray/15">
-            <table className="w-full text-[11px] uppercase tracking-[0.1em] text-left border-collapse">
-              <tbody>
-                <tr className="border-b border-grid-line">
-                  <td className="px-6 py-4 font-semibold text-charcoal-black/60 border-r border-grid-line">Timestamp</td>
-                  <td className="px-6 py-4 text-charcoal-black font-medium">{txTimestamp}</td>
-                </tr>
-                <tr>
-                  <td className="px-6 py-4 font-semibold text-charcoal-black/60 border-r border-grid-line">Reference Code</td>
-                  <td className="px-6 py-4 font-mono text-charcoal-black break-all font-semibold select-all">{txRef}</td>
-                </tr>
-              </tbody>
-            </table>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <button type="button" onClick={handleSaveReceipt} className="flex h-12 items-center justify-center gap-2 border border-charcoal-black bg-charcoal-black px-4 text-[11px] font-bold uppercase tracking-[0.15em] text-stone-white transition hover:bg-concrete-gray hover:text-charcoal-black"><Download className="h-4 w-4" /> Save image</button>
+            <button type="button" onClick={handleShareReceipt} className="flex h-12 items-center justify-center gap-2 border border-grid-line px-4 text-[11px] font-bold uppercase tracking-[0.15em] transition hover:bg-concrete-gray"><Share2 className="h-4 w-4" /> Share</button>
+            <button type="button" onClick={() => navigate('/dashboard')} className="flex h-12 items-center justify-center gap-2 border border-grid-line px-4 text-[11px] font-bold uppercase tracking-[0.15em] transition hover:bg-concrete-gray"><Home className="h-4 w-4" /> Dashboard</button>
           </div>
-
         </div>
-
-        {/* Big centered dashboard return button */}
-        <div className="w-full max-w-[650px] mx-auto border-t border-grid-line pt-6">
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="w-full h-16 bg-charcoal-black text-stone-white hover:bg-[#2A2A2A] text-[12px] uppercase tracking-[0.3em] font-bold transition-colors duration-100 cursor-pointer flex items-center justify-center"
-          >
-            Return Dashboard
-          </button>
-        </div>
-
       </main>
     );
   }

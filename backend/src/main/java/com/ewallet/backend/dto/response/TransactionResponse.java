@@ -17,6 +17,7 @@ public class TransactionResponse {
     private String senderPhone;
     private String receiverPhone;
     private BigDecimal amount;
+    private BigDecimal serviceFee;
     private String message;
     private TransactionStatus status;
     private TransactionType type;

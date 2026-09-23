@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useWallet, Transaction } from '../context/WalletContext';
 import { useNavigate } from 'react-router-dom';
 import { ArrowDownRight, ArrowUpRight, Clock3, Copy, Check, Eye, EyeOff, QrCode } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import QRCode from 'qrcode';
 
 const formatMobilePhone = (value?: string | null) => {
   if (!value) return 'Unknown';
@@ -33,7 +34,9 @@ export function Dashboard() {
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
   const profileComplete = Boolean(user?.address?.trim()) && Boolean(user?.dateOfBirth);
+  const formatVnd = (value: number) => Math.round(value).toLocaleString('en-US');
 
   const handleFinancialNavigation = (path: string) => {
     if ((path === '/receive' || path === '/send') && !profileComplete) {
@@ -63,6 +66,31 @@ export function Dashboard() {
   const recentTransactions = transactions.slice(0, 8);
   const walletAddress = formatMobilePhone(user?.phone);
   const maskedWalletAddress = maskPhoneNumber(walletAddress);
+
+  useEffect(() => {
+    if (!walletModalOpen || !qrCanvasRef.current || walletAddress === 'Unknown') return;
+
+    const paymentPayload = JSON.stringify({
+      version: 1,
+      type: 'EWALLET_RECEIVE',
+      walletId: user?.walletId || null,
+      receiverName: user?.name || null,
+      receiverPhone: walletAddress,
+      currency: 'VND'
+    });
+
+    QRCode.toCanvas(qrCanvasRef.current, paymentPayload, {
+      width: 256,
+      margin: 2,
+      errorCorrectionLevel: 'H',
+      color: {
+        dark: '#1A1A1A',
+        light: '#FFFFFF'
+      }
+    }).catch((error) => {
+      console.error('Failed to generate wallet QR code:', error);
+    });
+  }, [walletModalOpen, walletAddress, user?.name, user?.walletId]);
 
   const handleCopyWallet = () => {
     navigator.clipboard.writeText(walletAddress);
@@ -99,10 +127,9 @@ export function Dashboard() {
           </div>
           <div className="flex items-baseline gap-3">
             <span className="text-[72px] leading-none tracking-tight font-black text-charcoal-black">
-              ${balance.toFixed(2)}
+              {formatVnd(balance)} VND
             </span>
             <span className="text-[20px] font-black tracking-widest text-charcoal-black/60">
-              USD
             </span>
           </div>
         </section>
@@ -225,7 +252,7 @@ export function Dashboard() {
 
                   <div className="flex items-center gap-8 md:gap-12">
                     <div className="text-[16px] font-extrabold tracking-tight text-charcoal-black">
-                      {tx.type === 'send' ? '-' : '+'}${tx.amount.toFixed(2)}
+                      {tx.type === 'send' ? '-' : '+'}{formatVnd(tx.amount)} VND
                     </div>
                     
                     <div className="w-24 flex justify-end">
@@ -287,16 +314,12 @@ export function Dashboard() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-center rounded-2xl border border-dashed border-grid-line bg-concrete-gray/40 p-6">
-                <div className="flex h-40 w-40 items-center justify-center rounded-xl border border-charcoal-black/15 bg-white shadow-inner">
-                  <div className="grid h-28 w-28 grid-cols-4 gap-2">
-                    {Array.from({ length: 16 }).map((_, index) => (
-                      <div
-                        key={index}
-                        className={`aspect-square rounded-sm ${[0, 1, 4, 5, 8, 9, 12, 13].includes(index) ? 'bg-charcoal-black' : 'bg-charcoal-black/10'}`}
-                      />
-                    ))}
-                  </div>
+              <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-grid-line bg-concrete-gray/40 p-6">
+                <div className="flex items-center justify-center border border-charcoal-black/15 bg-white p-3 shadow-inner">
+                  <canvas ref={qrCanvasRef} aria-label="Wallet receiving QR code" />
+                </div>
+                <div className="text-center text-[10px] uppercase tracking-[0.16em] text-charcoal-black/55">
+                  Scan to send VND to this wallet
                 </div>
               </div>
 
@@ -361,7 +384,7 @@ export function Dashboard() {
                   </tr>
                   <tr className="border-b border-grid-line">
                     <td className="px-6 py-4 font-semibold uppercase text-charcoal-black/60 border-r border-grid-line">Amount</td>
-                    <td className="px-6 py-4 font-extrabold text-charcoal-black">${selectedTransaction.amount.toFixed(2)} USD</td>
+                    <td className="px-6 py-4 font-extrabold text-charcoal-black">{formatVnd(selectedTransaction.amount)} VND</td>
                   </tr>
                   <tr className="border-b border-grid-line">
                     <td className="px-6 py-4 font-semibold uppercase text-charcoal-black/60 border-r border-grid-line">Timestamp</td>

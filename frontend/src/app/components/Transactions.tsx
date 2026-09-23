@@ -186,13 +186,13 @@ export function Transactions() {
         <div className="p-8 flex flex-col justify-between h-36">
           <span className="text-[11px] uppercase tracking-[0.2em] text-medium-concrete font-medium">TOTAL DISPLAYED VOLUME</span>
           <div className="text-[32px] font-extrabold tracking-tight text-charcoal-black font-mono">
-            ${metrics.totalVolume.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {metrics.totalVolume.toLocaleString('vi-VN')} VND
           </div>
         </div>
         <div className="p-8 flex flex-col justify-between h-36">
           <span className="text-[11px] uppercase tracking-[0.2em] text-medium-concrete font-medium">NET FLOW DIRECTION</span>
           <div className={`text-[32px] font-extrabold tracking-tight font-mono ${metrics.netFlow >= 0 ? 'text-charcoal-black' : 'text-charcoal-black'}`}>
-            {metrics.netFlow >= 0 ? '+' : '-'}${Math.abs(metrics.netFlow).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {metrics.netFlow >= 0 ? '+' : '-'}{Math.abs(metrics.netFlow).toLocaleString('vi-VN')} VND
           </div>
         </div>
         <div className="p-8 flex flex-col justify-between h-36">
@@ -423,7 +423,7 @@ export function Transactions() {
                 <div className="flex flex-row md:flex-col justify-between md:justify-center md:items-end gap-2 md:gap-0 border-t border-grid-line/50 pt-4 md:pt-0 md:border-0">
                   <span className="md:hidden text-[11px] uppercase tracking-wider text-medium-concrete font-bold">AMOUNT:</span>
                   <div className="text-[18px] font-extrabold tracking-tight text-charcoal-black font-mono">
-                    {isDebit ? '-' : '+'}${transaction.amount.toFixed(2)}
+                    {isDebit ? '-' : '+'}{transaction.amount.toLocaleString('vi-VN')} VND
                   </div>
                 </div>
               </div>
@@ -463,7 +463,7 @@ export function Transactions() {
               <div className="bg-concrete-gray/30 p-8 border border-grid-line flex flex-col justify-center items-center space-y-4 rounded-none relative overflow-hidden">
                 <span className="text-[11px] uppercase tracking-[0.25em] text-medium-concrete font-bold">TRANSACTED AMOUNT</span>
                 <div className="text-[42px] font-black tracking-tight text-charcoal-black font-mono leading-none">
-                  {selectedTransaction.type === 'send' ? '-' : '+'}${selectedTransaction.amount.toFixed(2)}
+                  {selectedTransaction.type === 'send' ? '-' : '+'}{selectedTransaction.amount.toLocaleString('vi-VN')} VND
                 </div>
                 
                 {/* Diagonal Brutalist Status Stamp */}
@@ -575,7 +575,7 @@ export function Transactions() {
               <div className="border-y border-dashed border-charcoal-black py-6 text-center space-y-2">
                 <div className="text-[11px] uppercase tracking-[0.2em] text-charcoal-black/50">TRANSACTED AMOUNT</div>
                 <div className="text-[36px] font-black tracking-tight font-mono">
-                  {selectedTransaction.type === 'send' ? '-' : '+'}${selectedTransaction.amount.toFixed(2)}
+                  {selectedTransaction.type === 'send' ? '-' : '+'}{selectedTransaction.amount.toLocaleString('vi-VN')} VND
                 </div>
                 <div className="text-[12px] font-bold uppercase tracking-wider font-mono">
                   STATUS: {selectedTransaction.status.toUpperCase()}

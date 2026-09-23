@@ -25,6 +25,7 @@ export function Profile() {
   const { user, updateUser } = useAuth();
   const { balance } = useWallet();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const formatVnd = (value: number) => Math.round(value).toLocaleString('en-US');
 
   const activeUser = user ?? {
     name: 'ANDO TADAO',
@@ -266,8 +267,7 @@ export function Profile() {
             <section className="border border-grid-line bg-charcoal-black p-8 text-stone-white">
               <div className="uppercase tracking-[0.35em] text-[11px] text-stone-white/70 mb-4">Current balance</div>
               <div className="bg-[#2a2a2a] p-6">
-                <div className="text-[40px] md:text-[48px] font-black tracking-tight leading-none">${balance.toFixed(2)}</div>
-                <div className="mt-3 text-[11px] uppercase tracking-[0.35em] text-stone-white/70">USD</div>
+                <div className="text-[40px] md:text-[48px] font-black tracking-tight leading-none">{formatVnd(balance)} VND</div>
               </div>
               <div className="mt-6 flex items-center justify-between border-t border-grid-line pt-5 text-[11px] uppercase tracking-[0.25em] text-stone-white/70">
                 <span>Wallet status</span>

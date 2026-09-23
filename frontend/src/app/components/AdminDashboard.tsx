@@ -388,7 +388,7 @@ export function AdminDashboard() {
 
                 <div className="border border-grid-line p-8 bg-stone-white flex flex-col justify-between h-40 rounded-none relative">
                   <span className="text-[11px] uppercase tracking-[0.2em] text-medium-concrete font-bold">TRANSACTION BALANCE VOL</span>
-                  <div className="text-[44px] font-black tracking-tight text-charcoal-black font-mono leading-none whitespace-normal break-words overflow-hidden">${Number(metrics.totalVolume).toLocaleString('en-US', { maximumFractionDigits: 0 })}</div>
+                  <div className="text-[44px] font-black tracking-tight text-charcoal-black font-mono leading-none whitespace-normal break-words overflow-hidden">{Number(metrics.totalVolume).toLocaleString('vi-VN')} VND</div>
                 </div>
               </div>
 
@@ -471,7 +471,7 @@ export function AdminDashboard() {
                           {userItem.userStatus}
                         </span>
                       </div>
-                      <div className="font-mono font-bold text-charcoal-black">${Number(userItem.balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                      <div className="font-mono font-bold text-charcoal-black">{Number(userItem.balance || 0).toLocaleString('vi-VN')} VND</div>
                       <div className="text-charcoal-black/60 uppercase text-[11px]">{formatDate(userItem.createdAt)}</div>
                       <div className="flex items-center justify-center gap-2">
                         {userItem.userStatus === 'ACTIVE' ? (
@@ -553,7 +553,7 @@ export function AdminDashboard() {
                       </div>
                       <div className="font-mono text-[12px] uppercase">{formatDate(txn.createdAt)}</div>
                       <div><span className={`text-[10px] font-bold uppercase ${txn.status === 'APPROVED' ? 'text-success' : txn.status === 'PENDING' ? 'text-warning' : txn.status === 'REJECTED' ? 'text-error' : 'text-medium-concrete'}`}>{txn.status}</span></div>
-                      <div className="text-right font-mono font-bold text-[15px]">{txn.type === 'TRANSFER' || txn.type === 'WITHDRAW' ? '-' : '+'}${Number(txn.amount || 0).toFixed(2)}</div>
+                      <div className="text-right font-mono font-bold text-[15px]">{txn.type === 'TRANSFER' || txn.type === 'WITHDRAW' ? '-' : '+'}{Number(txn.amount || 0).toLocaleString('vi-VN')} VND</div>
                       <div className="flex justify-end gap-2">
                         {txn.type === 'DEPOSIT_REQUEST' && txn.status === 'PENDING' ? (
                           <>
@@ -617,7 +617,7 @@ export function AdminDashboard() {
                         <div>
                           <span className={`text-[10px] font-bold uppercase px-3 py-1 border rounded-none ${txn.status === 'APPROVED' ? 'border-success text-success bg-success/5' : txn.status === 'REJECTED' ? 'border-error text-error bg-error/5' : 'border-charcoal-black text-charcoal-black bg-stone-white'}`}>{txn.status}</span>
                         </div>
-                        <div className="font-mono font-bold text-[15px] text-charcoal-black">${Number(txn.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                        <div className="font-mono font-bold text-[15px] text-charcoal-black">{Number(txn.amount || 0).toLocaleString('vi-VN')} VND</div>
                         <div className="flex gap-2 justify-end">
                           {txn.status !== 'APPROVED' && txn.status !== 'REJECTED' ? (
                             <>

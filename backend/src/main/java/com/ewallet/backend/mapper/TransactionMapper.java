@@ -30,6 +30,7 @@ public class TransactionMapper {
                                 : "SYSTEM"
                 )
                 .amount(tx.getAmount())
+                .serviceFee(tx.getServiceFee())
                 .message(tx.getMessage())
                 .status(tx.getStatus())
                 .type(tx.getType())

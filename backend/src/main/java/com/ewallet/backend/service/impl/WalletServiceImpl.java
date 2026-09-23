@@ -78,6 +78,8 @@ public class WalletServiceImpl implements WalletService {
     private static final BigDecimal MIN_TRANSFER_AMOUNT =new BigDecimal("1.00");
     private static final BigDecimal MAX_TRANSFER_AMOUNT =new BigDecimal("5000.00");
     private static final BigDecimal WITHDRAW_APPROVAL_THRESHOLD = new BigDecimal("3000");
+        private static final BigDecimal TRANSFER_FEE_RATE = new BigDecimal("0.002");
+        private static final BigDecimal WITHDRAWAL_FEE_RATE = new BigDecimal("0.005");
     
 
 
@@ -137,7 +139,8 @@ public class WalletServiceImpl implements WalletService {
         validateProfileCompletion(senderWalletTemp.getUser());
         validateUserStatus(receiverWalletTemp.getUser());
 
-        if (senderWalletTemp.getBalance().compareTo(request.getAmount()) < 0) {
+                BigDecimal transferFee = calculateTransferFee(request.getAmount());
+                if (senderWalletTemp.getBalance().compareTo(request.getAmount().add(transferFee)) < 0) {
             throw new BadRequestException("Insufficient balance");
         }
 
@@ -149,7 +152,6 @@ public class WalletServiceImpl implements WalletService {
         Wallet senderWallet = senderWalletTemp;
         String phone = senderWallet.getUser().getPhone();
         log.info("[TRANSFER-INITIATE] OTP generated for user {}", phone);
-        log.debug("[TRANSFER-INITIATE] OTP code for user {}: {}", phone, otpCode);
 
         Otp otp = Otp.builder()
             .user(senderWallet.getUser())
@@ -165,15 +167,8 @@ public class WalletServiceImpl implements WalletService {
        
 
         log.info("[TRANSFER-INITIATE] OTP saved to database for user {}", senderWallet.getUser().getPhone());
-        log.info("==========================================");
-        log.info("MA OTP CHUYEN TIEN CHO [{}]: {}", senderWallet.getUser().getPhone(), otpCode);
-        log.info("SO TIEN: {}", request.getAmount());
-        log.info("NGUOI NHAN: {}", receiverWalletTemp.getUser().getPhone());
-        log.info("HAN SD: 5 PHUT");
-        log.info("==========================================");
-
         TransferOtpResponse response = TransferOtpResponse.builder()
-                .message("OTP generated successfully. OTP has been printed to the server console.")
+                .message("OTP generated successfully. Deliver it through the configured secure channel.")
                 .receiverName(receiverWalletTemp.getUser().getName())
                 .receiverPhone(receiverPhone)
                 .amount(request.getAmount().toString())
@@ -300,18 +295,18 @@ try {
         validateUserStatus(senderWallet.getUser());
         validateUserStatus(receiverWallet.getUser());
 
-        if (senderWallet.getBalance().compareTo(request.getAmount()) < 0) {
+                BigDecimal fee = calculateTransferFee(request.getAmount());
+                BigDecimal totalDebit = request.getAmount().add(fee);
+                if (senderWallet.getBalance().compareTo(totalDebit) < 0) {
             throw new BadRequestException("Insufficient balance");
         }
 
-        senderWallet.setBalance(senderWallet.getBalance().subtract(request.getAmount()));
+                senderWallet.setBalance(senderWallet.getBalance().subtract(totalDebit));
         receiverWallet.setBalance(receiverWallet.getBalance().add(request.getAmount()));
     
     walletRepository.saveAll(Objects.requireNonNull(List.of(senderWallet, receiverWallet)));
 
 
-    BigDecimal fee = request.getAmount().multiply(BigDecimal.valueOf(0.01));
-    
         Transaction transaction = Transaction
                 .builder()
                 .serviceFee(fee)
@@ -397,6 +392,16 @@ finally {
                 transferKey);
     }
 }
+
+        private BigDecimal calculateTransferFee(BigDecimal amount) {
+                return amount.multiply(TRANSFER_FEE_RATE)
+                                .setScale(2, java.math.RoundingMode.HALF_UP);
+        }
+
+        private BigDecimal calculateWithdrawalFee(BigDecimal amount) {
+                return amount.multiply(WITHDRAWAL_FEE_RATE)
+                                .setScale(2, java.math.RoundingMode.HALF_UP);
+        }
 
     @Override
     @Transactional
@@ -545,7 +550,9 @@ finally {
         validateUserStatus(lockedWallet.getUser());
         validateProfileCompletion(lockedWallet.getUser());
 
-        if (lockedWallet.getBalance().compareTo(request.getAmount()) < 0) {
+        BigDecimal withdrawalFee = calculateWithdrawalFee(request.getAmount());
+        BigDecimal totalDebit = request.getAmount().add(withdrawalFee);
+        if (lockedWallet.getBalance().compareTo(totalDebit) < 0) {
 
         throw new BadRequestException(
                 "Insufficient balance"
@@ -599,8 +606,8 @@ finally {
             .build();
 }
 
-    lockedWallet.setBalance(lockedWallet.getBalance()
-                .subtract(request.getAmount()));
+        lockedWallet.setBalance(lockedWallet.getBalance()
+                                .subtract(totalDebit));
 
     walletRepository.save(lockedWallet);
 
@@ -610,7 +617,7 @@ finally {
             .senderWallet(lockedWallet)
             .receiverWallet(null)
             .amount(request.getAmount())
-            .serviceFee(BigDecimal.ZERO)
+            .serviceFee(withdrawalFee)
             .message(
                     request.getMessage() == null
                             || request.getMessage().isBlank()
