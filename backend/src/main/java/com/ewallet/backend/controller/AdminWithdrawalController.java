@@ -5,11 +5,13 @@ import com.ewallet.backend.dto.response.WithdrawalRequestResponse;
 import com.ewallet.backend.service.WithdrawalApprovalService;
 
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin/withdraw-requests")
+@PreAuthorize("hasRole('ADMIN')")
 public class AdminWithdrawalController {
 
     private final WithdrawalApprovalService service;

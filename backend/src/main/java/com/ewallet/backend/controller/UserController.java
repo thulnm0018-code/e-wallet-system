@@ -62,6 +62,7 @@ public class UserController {
     }
 
     @GetMapping("/admin")
+        @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<List<AdminUserResponse>>> getAdminUsers() {
         return ResponseEntity.ok(
                 ApiResponse.<List<AdminUserResponse>>builder()
@@ -72,6 +73,7 @@ public class UserController {
     }
 
     @GetMapping("/admin/transactions")
+        @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<List<AdminTransactionResponse>>> getAdminTransactions() {
         return ResponseEntity.ok(
                 ApiResponse.<List<AdminTransactionResponse>>builder()
@@ -82,6 +84,7 @@ public class UserController {
     }
 
     @GetMapping("/admin/dashboard")
+        @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<AdminDashboardResponse>> getAdminDashboard() {
         return ResponseEntity.ok(
                 ApiResponse.<AdminDashboardResponse>builder()

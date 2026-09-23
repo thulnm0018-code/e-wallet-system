@@ -12,6 +12,8 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.util.Objects;
@@ -24,19 +26,29 @@ public class DatabaseSeeder implements CommandLineRunner {
     private final UserRepository userRepository;
     private final WalletRepository walletRepository;
     private final PasswordEncoder passwordEncoder;
+    private final String adminEmail;
+    private final String adminPassword;
 
     public DatabaseSeeder(UserRepository userRepository, 
                           WalletRepository walletRepository, 
-                          PasswordEncoder passwordEncoder) {
+                          PasswordEncoder passwordEncoder,
+                          @Value("${app.bootstrap-admin.email:}") String adminEmail,
+                          @Value("${app.bootstrap-admin.password:}") String adminPassword) {
         this.userRepository = userRepository;
         this.walletRepository = walletRepository;
         this.passwordEncoder = passwordEncoder;
+        this.adminEmail = adminEmail;
+        this.adminPassword = adminPassword;
     }
 
     @Override
     @Transactional
     public void run(String... args) throws Exception {
-        String adminEmail = "admin@wallet.com";
+        if (!StringUtils.hasText(adminEmail) || !StringUtils.hasText(adminPassword)) {
+            log.warn("Bootstrap admin is not configured; skipping admin seeding.");
+            return;
+        }
+
         if (!userRepository.existsByEmailAndDeletedFalse(adminEmail)) {
             log.info("Seeding default admin user...");
             
@@ -44,7 +56,7 @@ public class DatabaseSeeder implements CommandLineRunner {
             admin.setName("System Admin");
             admin.setEmail(adminEmail);
             admin.setPhone("+84999999999");
-            admin.setPasswordHash(passwordEncoder.encode("admin123"));
+            admin.setPasswordHash(passwordEncoder.encode(adminPassword));
             admin.setRole(User.Role.ADMIN);
             admin.setUserStatus(UserStatus.ACTIVE);
             
@@ -60,7 +72,7 @@ public class DatabaseSeeder implements CommandLineRunner {
             savedAdmin.setWallet(wallet);
             userRepository.save(savedAdmin);
             
-            log.info("Default admin user seeded successfully: admin@wallet.com / admin123");
+            log.info("Bootstrap admin user seeded successfully for {}", adminEmail);
         } else {
             log.info("Admin user already exists. Skipping seeding.");
         }

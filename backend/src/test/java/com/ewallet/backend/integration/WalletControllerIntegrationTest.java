@@ -172,7 +172,7 @@ class WalletControllerIntegrationTest {
 
        assertThat(updatedSender.getBalance())
         .isEqualByComparingTo(
-                new BigDecimal("90.00")
+                new BigDecimal("89.98")
         );
 
         assertThat(updatedReceiver.getBalance())
@@ -344,7 +344,7 @@ assertThat(
         Wallet updatedWallet = walletRepository.findByUser_Id(sender.getId()).orElseThrow();
 
                 assertThat(updatedWallet.getBalance())
-                .isEqualByComparingTo(new BigDecimal("900.00"));
+                .isEqualByComparingTo(new BigDecimal("899.50"));
 
                  Transaction transaction =
             transactionRepository

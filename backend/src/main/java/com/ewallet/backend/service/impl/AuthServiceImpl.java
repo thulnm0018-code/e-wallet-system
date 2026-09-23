@@ -95,6 +95,10 @@ public class AuthServiceImpl implements AuthService {
             throw new UnauthorizedException("Account is not activated. Please verify your OTP.");
         }
 
+        if (user.getUserStatus() == UserStatus.LOCKED || Boolean.TRUE.equals(user.getDeleted())) {
+            throw new UnauthorizedException("Account is unavailable");
+        }
+
         if (!passwordEncoder.matches(password, user.getPasswordHash())) {
             throw new UnauthorizedException("Invalid credentials");
         }
@@ -123,6 +127,12 @@ public class AuthServiceImpl implements AuthService {
         }
 
         User user = storedToken.getUser();
+
+        if (user.getUserStatus() == UserStatus.LOCKED || Boolean.TRUE.equals(user.getDeleted())) {
+            storedToken.setRevoked(true);
+            refreshTokenRepository.save(storedToken);
+            throw new UnauthorizedException("Account is unavailable");
+        }
 
         storedToken.setRevoked(true);
         refreshTokenRepository.save(storedToken);
@@ -171,6 +181,10 @@ refreshTokenRepository.save(newRefreshToken);
     User user = userRepository.findById(userId)
             .orElseThrow(() ->
                     new UnauthorizedException("User not found"));
+
+    if (user.getUserStatus() == UserStatus.LOCKED || Boolean.TRUE.equals(user.getDeleted())) {
+        throw new UnauthorizedException("Account is unavailable");
+    }
 
     return UserResponse.fromEntity(user);
     }

@@ -24,6 +24,7 @@ export function ResetPassword() {
   const identifier = location.state?.identifier || '';
 
   const [password, setPassword] = useState('');
+  const [otpCode, setOtpCode] = useState('');
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
   const [passwordError, setPasswordError] = useState('');
@@ -47,6 +48,11 @@ export function ResetPassword() {
       return;
     }
 
+    if (!/^\d{6}$/.test(otpCode)) {
+      setPasswordError('Enter the 6-digit recovery OTP');
+      return;
+    }
+
     if (!identifier) {
       setPasswordError('Recovery identifier is missing');
       return;
@@ -56,6 +62,7 @@ export function ResetPassword() {
     try {
       await api.post('/auth/reset-password', {
         identifier,
+        otpCode,
         newPassword: password,
       });
       setSuccess(true);
@@ -139,6 +146,19 @@ export function ResetPassword() {
 
         <form onSubmit={handleSubmit} className="space-y-10">
           <div className="space-y-8">
+            <Input
+              label="Recovery OTP"
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="Enter the 6-digit code"
+              value={otpCode}
+              onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              disabled={loading}
+              error={passwordError}
+              className="text-[15px] tracking-[0.25em] font-mono"
+            />
+
             <div className="space-y-2">
               <Input
                 label="New Password"

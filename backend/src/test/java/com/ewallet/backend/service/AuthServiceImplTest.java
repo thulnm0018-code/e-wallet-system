@@ -50,6 +50,9 @@ class AuthServiceImplTest {
     @Mock
     private com.ewallet.backend.repository.OtpRepository otpRepository;
 
+    @Mock
+    private com.ewallet.backend.util.CookieUtils cookieUtils;
+
     @InjectMocks
     private com.ewallet.backend.service.impl.AuthServiceImpl authService;
 

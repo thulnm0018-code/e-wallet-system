@@ -262,6 +262,10 @@ public void unlockUser(Long id) {
         if (otp.getExpiredAt().isBefore(LocalDateTime.now())) {
             throw new BadRequestException("OTP expired");
         }
+        if (otp.getAmount() != null || otp.getReceiverPhone() != null
+                || !otp.getOtpCode().equals(request.getOtpCode())) {
+            throw new BadRequestException("Invalid OTP");
+        }
 
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         otp.setVerified(true);
