@@ -1,10 +1,11 @@
 CREATE TABLE withdrawal_requests (
-
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
 
     user_id BIGINT NOT NULL,
 
     amount DECIMAL(15,2) NOT NULL,
+
+    reserved_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
 
     status VARCHAR(30) NOT NULL,
 
@@ -18,7 +19,12 @@ CREATE TABLE withdrawal_requests (
 
     CONSTRAINT fk_withdraw_request_user
         FOREIGN KEY (user_id)
-        REFERENCES users(id)
+        REFERENCES users(id),
+
+    UNIQUE KEY uq_withdrawal_idempotency_user (
+        idempotency_key,
+        user_id
+    )
 );
 
 CREATE INDEX idx_withdraw_request_user

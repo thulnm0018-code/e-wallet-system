@@ -10,7 +10,7 @@ export function OTPVerification() {
   const [shaking, setShaking] = useState(false);
   const [timeLeft, setTimeLeft] = useState(300);
   const [expired, setExpired] = useState(false);
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const maskedIdentifier = '***lo@w****t.com';
 
@@ -30,24 +30,11 @@ export function OTPVerification() {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  const handleChange = (index: number, value: string) => {
-    if (!/^\d?$/.test(value)) return;
-
-    const newOtp = [...otp];
-    newOtp[index] = value;
-    setOtp(newOtp);
+  const handleChange = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 6);
+    setOtp(Array.from({ length: 6 }, (_, index) => digits[index] || ''));
     setError('');
     setShaking(false);
-
-    if (value && index < 5) {
-      inputRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -74,7 +61,7 @@ export function OTPVerification() {
       setShaking(true);
       setError('Verification code invalid');
       setOtp(['', '', '', '', '', '']);
-      inputRefs.current[0]?.focus();
+      inputRef.current?.focus();
       setLoading(false);
       setTimeout(() => setShaking(false), 500);
     }
@@ -86,7 +73,7 @@ export function OTPVerification() {
     setOtp(['', '', '', '', '', '']);
     setError('');
     setShaking(false);
-    inputRefs.current[0]?.focus();
+    inputRef.current?.focus();
   };
 
   const handleRequestNew = () => {
@@ -95,7 +82,7 @@ export function OTPVerification() {
     setOtp(['', '', '', '', '', '']);
     setError('');
     setShaking(false);
-    inputRefs.current[0]?.focus();
+    inputRef.current?.focus();
   };
 
   return (
@@ -117,24 +104,28 @@ export function OTPVerification() {
 
             {!expired ? (
               <>
-                <div className={`flex gap-2 justify-center ${shaking ? 'animate-bounce' : ''}`} style={shaking ? { animation: 'shake 0.3s ease-in-out' } : {}}>
+                <div className={`relative flex gap-2 justify-center ${shaking ? 'animate-bounce' : ''}`} style={shaking ? { animation: 'shake 0.3s ease-in-out' } : {}} onClick={() => inputRef.current?.focus()}>
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    value={otp.join('')}
+                    onChange={(e) => handleChange(e.target.value)}
+                    disabled={loading || expired}
+                    aria-label="6-digit OTP code"
+                    className="absolute inset-0 z-10 h-full w-full cursor-text opacity-0"
+                  />
                   {otp.map((digit, index) => (
-                    <input
+                    <div
                       key={index}
-                      ref={(el) => { inputRefs.current[index] = el; }}
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={1}
-                      value={digit}
-                      onChange={(e) => handleChange(index, e.target.value)}
-                      onKeyDown={(e) => handleKeyDown(index, e)}
-                      disabled={loading || expired}
                       className={`w-12 h-14 text-center text-lg font-bold border-2 transition-colors duration-150 ${
                         error
                           ? 'border-[#8B6B6B] text-charcoal-black'
                           : 'border-grid-line text-charcoal-black focus:border-charcoal-black focus:outline-none'
                       }`}
-                    />
+                    >{digit}</div>
                   ))}
                 </div>
 

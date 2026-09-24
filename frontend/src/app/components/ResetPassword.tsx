@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../api';
 import { Button } from './Button';
 import { Input } from './Input';
+import { AlertCircle, Lock } from 'lucide-react';
 
 function evaluateStrength(password: string) {
   let score = 0;
@@ -24,12 +25,15 @@ export function ResetPassword() {
   const identifier = location.state?.identifier || '';
 
   const [password, setPassword] = useState('');
-  const [otpCode, setOtpCode] = useState('');
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
   const [passwordError, setPasswordError] = useState('');
   const [confirmError, setConfirmError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [otpModalOpen, setOtpModalOpen] = useState(false);
+  const [otp, setOtp] = useState<string[]>(Array(6).fill(''));
+  const [otpError, setOtpError] = useState('');
+  const otpInputRef = useRef<HTMLInputElement | null>(null);
 
   const strength = useMemo(() => evaluateStrength(password), [password]);
 
@@ -48,13 +52,41 @@ export function ResetPassword() {
       return;
     }
 
-    if (!/^\d{6}$/.test(otpCode)) {
-      setPasswordError('Enter the 6-digit recovery OTP');
+    if (!identifier) {
+      setPasswordError('Recovery identifier is missing');
       return;
     }
 
-    if (!identifier) {
-      setPasswordError('Recovery identifier is missing');
+    setLoading(true);
+    try {
+      await api.post('/auth/forgot-password', { identifier });
+      setOtp(Array(6).fill(''));
+      setOtpError('');
+      setOtpModalOpen(true);
+    } catch (err: any) {
+      setPasswordError(err?.response?.data?.message || 'Unable to send the verification code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (otpModalOpen) {
+      setTimeout(() => otpInputRef.current?.focus(), 100);
+    }
+  }, [otpModalOpen]);
+
+  const handleOtpChange = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 6);
+    setOtp(Array.from({ length: 6 }, (_, index) => digits[index] || ''));
+    setOtpError('');
+  };
+
+  const handleOtpSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const otpCode = otp.join('');
+    if (otpCode.length !== 6) {
+      setOtpError('Enter all 6 digits');
       return;
     }
 
@@ -65,9 +97,12 @@ export function ResetPassword() {
         otpCode,
         newPassword: password,
       });
+      setOtpModalOpen(false);
       setSuccess(true);
     } catch (err: any) {
-      setPasswordError(err?.response?.data?.message || 'Unable to reset password');
+      setOtpError(err?.response?.data?.message || 'The verification code is invalid');
+      setOtp(Array(6).fill(''));
+      otpInputRef.current?.focus();
     } finally {
       setLoading(false);
     }
@@ -118,7 +153,7 @@ export function ResetPassword() {
   }
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#e4e1dc] text-charcoal-black flex items-center justify-center">
+    <main className="min-h-screen overflow-hidden bg-[#e4e1dc] text-charcoal-black flex items-center justify-center transition duration-200">
       {/* Background gradients */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.18),transparent_18%),radial-gradient(circle_at_bottom_right,rgba(0,0,0,0.08),transparent_18%),linear-gradient(125deg,#ebe8e1,#d9d6cf)]" />
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.12),transparent_36%,rgba(0,0,0,0.05))]" />
@@ -146,19 +181,6 @@ export function ResetPassword() {
 
         <form onSubmit={handleSubmit} className="space-y-10">
           <div className="space-y-8">
-            <Input
-              label="Recovery OTP"
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              placeholder="Enter the 6-digit code"
-              value={otpCode}
-              onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              disabled={loading}
-              error={passwordError}
-              className="text-[15px] tracking-[0.25em] font-mono"
-            />
-
             <div className="space-y-2">
               <Input
                 label="New Password"
@@ -221,6 +243,65 @@ export function ResetPassword() {
           </div>
         </form>
       </div>
+
+      {otpModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-charcoal-black/40 p-4 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md border border-grid-line bg-stone-white p-8 shadow-[0_24px_80px_rgba(0,0,0,0.18)]">
+            <div className="mb-8 flex items-start justify-between gap-5 border-b border-grid-line pb-6">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.3em] text-medium-concrete">
+                  <Lock className="h-4 w-4" /> Secure recovery
+                </div>
+                <h2 className="text-[28px] font-black uppercase tracking-[0.12em]">Enter OTP</h2>
+                <p className="text-[11px] uppercase tracking-[0.12em] text-medium-concrete">Verify your identity before changing the password.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOtpModalOpen(false)}
+                disabled={loading}
+                className="text-xl font-light text-medium-concrete transition hover:text-charcoal-black"
+                aria-label="Close OTP dialog"
+              >
+                x
+              </button>
+            </div>
+
+            <form onSubmit={handleOtpSubmit} className="space-y-7">
+              <div className="text-center text-[12px] uppercase tracking-[0.18em] text-medium-concrete">
+                Recovery code for <span className="font-bold text-charcoal-black">{identifier}</span>
+              </div>
+              <div className="relative flex justify-center gap-2" onClick={() => otpInputRef.current?.focus()}>
+                <input
+                  ref={otpInputRef}
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={otp.join('')}
+                  onChange={(event) => handleOtpChange(event.target.value)}
+                  disabled={loading}
+                  aria-label="6-digit OTP code"
+                  className="absolute inset-0 z-10 h-full w-full cursor-text opacity-0"
+                />
+                {otp.map((digit, index) => (
+                  <div
+                    key={index}
+                    className={`flex h-14 w-11 items-center justify-center border-2 bg-transparent text-lg font-bold text-charcoal-black transition ${otpError ? 'border-[#8B6B6B]' : 'border-grid-line'}`}
+                  >{digit}</div>
+                ))}
+              </div>
+              {otpError && (
+                <div className="flex items-center justify-center gap-2 text-center text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B6B6B]">
+                  <AlertCircle className="h-4 w-4" /> {otpError}
+                </div>
+              )}
+              <Button type="submit" variant="primary" className="h-12 w-full rounded-none uppercase tracking-[0.3em]" disabled={loading}>
+                {loading ? 'Verifying...' : 'Verify and reset password'}
+              </Button>
+            </form>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes pulse-line {

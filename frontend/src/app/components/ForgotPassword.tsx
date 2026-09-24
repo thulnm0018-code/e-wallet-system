@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../../api';
 import { Button } from './Button';
 import { Input } from './Input';
 
@@ -32,14 +31,8 @@ export function ForgotPassword() {
     }
 
     setLoading(true);
-    try {
-      await api.post('/auth/forgot-password', { identifier: trimmed });
-      navigate('/reset-password', { state: { identifier: trimmed } });
-    } catch (err: any) {
-      setError(err?.response?.data?.message || 'Unable to process password recovery right now');
-    } finally {
-      setLoading(false);
-    }
+    setLoading(false);
+    navigate('/reset-password', { state: { identifier: trimmed } });
   };
 
   return (
@@ -83,10 +76,10 @@ export function ForgotPassword() {
             <Button
               type="submit"
               variant="primary"
-              className="h-14 w-full rounded-none uppercase tracking-[0.35em] transition-all duration-200 hover:tracking-[0.42em]"
+              className="h-14 w-full rounded-none px-3 text-[11px] uppercase tracking-[0.18em] transition-all duration-200 hover:tracking-[0.22em]"
               disabled={loading}
             >
-              {loading ? 'Verifying Credentials…' : 'Continue'}
+              {loading ? 'Continuing…' : 'Continue'}
             </Button>
 
             <div className="mt-6 text-center">

@@ -8,6 +8,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import java.time.LocalDateTime;
 import java.math.BigDecimal;
+import com.ewallet.backend.enums.OtpPurpose;
 
 @Entity
 @Table(name = "otps")
@@ -22,8 +23,12 @@ public class Otp {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 6)
+    @Column(nullable = false, length = 64)
     private String otpCode;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private OtpPurpose purpose;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
@@ -51,5 +56,10 @@ public class Otp {
     @PrePersist
     public void onCreate() {
         createdAt = LocalDateTime.now();
+        if (purpose == null) {
+            purpose = amount != null || receiverPhone != null
+                    ? OtpPurpose.TRANSFER
+                    : OtpPurpose.ACCOUNT_ACTIVATION;
+        }
     }
 }

@@ -210,7 +210,9 @@ BigDecimal getRevenueByMonth(
             @Param("end") LocalDateTime end
     );
 
-    Optional<Transaction>findByIdempotencyKey(String idempotencyKey);
+    Optional<Transaction> findByIdempotencyKeyAndIdempotencyOwner_Id(String idempotencyKey, Long userId);
+
+    Optional<Transaction> findByIdempotencyKey(String idempotencyKey);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""

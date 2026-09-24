@@ -18,6 +18,8 @@ import com.ewallet.backend.service.AuthService;
 import com.ewallet.backend.security.jwt.JwtTokenProvider;
 import com.ewallet.backend.util.CookieUtils;
 import com.ewallet.backend.util.PhoneUtils;
+import com.ewallet.backend.util.OtpSecurity;
+import com.ewallet.backend.enums.OtpPurpose;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -92,7 +94,7 @@ public class AuthServiceImpl implements AuthService {
         }
         // Check if user is pending verification
         if (user.getUserStatus() == UserStatus.PENDING_VERIFICATION) {
-            throw new UnauthorizedException("Account is not activated. Please verify your OTP.");
+            throw new UnauthorizedException("Invalid credentials");
         }
 
         if (user.getUserStatus() == UserStatus.LOCKED || Boolean.TRUE.equals(user.getDeleted())) {
@@ -268,10 +270,13 @@ public void verifyOtp(String phoneOrEmail, String otpCode) {
         }
     }
 
-    Otp otp = otpRepository
-            .findTopByUser_EmailOrUser_PhoneOrderByCreatedAtDesc(
-                    normalizedIdentifier,
-                    normalizedIdentifier)
+        final String identifierForLookup = normalizedIdentifier;
+        Otp otp = otpRepository
+            .findTopByUser_EmailAndPurposeOrUser_PhoneAndPurposeOrderByCreatedAtDesc(
+                identifierForLookup, OtpPurpose.ACCOUNT_ACTIVATION,
+                identifierForLookup, OtpPurpose.ACCOUNT_ACTIVATION)
+            .or(() -> otpRepository.findTopByUser_EmailOrUser_PhoneOrderByCreatedAtDesc(
+                identifierForLookup, identifierForLookup))
             .orElseThrow(
                     () -> new RuntimeException(
                             "OTP does not exist"));
@@ -281,7 +286,7 @@ public void verifyOtp(String phoneOrEmail, String otpCode) {
                 "OTP already used");
     }
 
-    if (!otp.getOtpCode().equals(otpCode)) {
+    if (!matchesOtp(otpCode, otp)) {
         throw new RuntimeException(
                 "Invalid OTP");
     }
@@ -314,5 +319,9 @@ public void verifyOtp(String phoneOrEmail, String otpCode) {
     otp.setVerified(true);
 
     otpRepository.save(otp);
+}
+
+private boolean matchesOtp(String rawOtp, Otp otp) {
+    return OtpSecurity.matches(rawOtp, otp.getOtpCode()) || rawOtp.equals(otp.getOtpCode());
 }
 }

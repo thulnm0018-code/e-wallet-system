@@ -16,7 +16,7 @@ export function OTPModal({ isOpen, identifier, onSuccess, onClose }: OTPModalPro
   const [shaking, setShaking] = useState(false);
   const [timeLeft, setTimeLeft] = useState(300);
   const [expired, setExpired] = useState(false);
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -28,9 +28,7 @@ export function OTPModal({ isOpen, identifier, onSuccess, onClose }: OTPModalPro
     setExpired(false);
     
     // Auto focus first input
-    setTimeout(() => {
-      inputRefs.current[0]?.focus();
-    }, 100);
+    setTimeout(() => inputRef.current?.focus(), 100);
   }, [isOpen]);
 
   useEffect(() => {
@@ -68,24 +66,11 @@ export function OTPModal({ isOpen, identifier, onSuccess, onClose }: OTPModalPro
     }
   };
 
-  const handleChange = (index: number, value: string) => {
-    if (!/^\d?$/.test(value)) return;
-
-    const newOtp = [...otp];
-    newOtp[index] = value;
-    setOtp(newOtp);
+  const handleChange = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 6);
+    setOtp(Array.from({ length: 6 }, (_, index) => digits[index] || ''));
     setError('');
     setShaking(false);
-
-    if (value && index < 5) {
-      inputRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -114,7 +99,7 @@ export function OTPModal({ isOpen, identifier, onSuccess, onClose }: OTPModalPro
       const errMsg = err.response?.data?.message || 'Verification code invalid';
       setError(errMsg);
       setOtp(['', '', '', '', '', '']);
-      inputRefs.current[0]?.focus();
+      inputRef.current?.focus();
       setLoading(false);
       setTimeout(() => setShaking(false), 500);
     }
@@ -126,7 +111,7 @@ export function OTPModal({ isOpen, identifier, onSuccess, onClose }: OTPModalPro
     setOtp(['', '', '', '', '', '']);
     setError('');
     setShaking(false);
-    inputRefs.current[0]?.focus();
+    inputRef.current?.focus();
     
     // Attempt to call register or login endpoints again to regenerate OTP, 
     // or since backend generates it on register, we can show a simulated message or call a resend endpoint if it exists.
@@ -175,24 +160,30 @@ export function OTPModal({ isOpen, identifier, onSuccess, onClose }: OTPModalPro
                 className={`flex gap-2 justify-center`} 
                 style={shaking ? { animation: 'shake 0.3s ease-in-out' } : {}}
               >
-                {otp.map((digit, index) => (
+                <div className="relative flex gap-2 justify-center" onClick={() => inputRef.current?.focus()}>
                   <input
-                    key={index}
-                    ref={(el) => { inputRefs.current[index] = el; }}
+                    ref={inputRef}
                     type="text"
                     inputMode="numeric"
-                    maxLength={1}
-                    value={digit}
-                    onChange={(e) => handleChange(index, e.target.value)}
-                    onKeyDown={(e) => handleKeyDown(index, e)}
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    value={otp.join('')}
+                    onChange={(e) => handleChange(e.target.value)}
                     disabled={loading}
-                    className={`w-12 h-14 text-center text-lg font-bold border-2 transition-colors duration-150 ${
-                      error
-                        ? 'border-[#8B6B6B] text-charcoal-black'
-                        : 'border-grid-line text-charcoal-black focus:border-charcoal-black focus:outline-none'
-                    }`}
+                    aria-label="6-digit OTP code"
+                    className="absolute inset-0 z-10 h-full w-full cursor-text opacity-0"
                   />
-                ))}
+                  {otp.map((digit, index) => (
+                    <div
+                      key={index}
+                      className={`flex h-14 w-12 items-center justify-center border-2 text-lg font-bold leading-none transition-colors duration-150 ${
+                        error ? 'border-[#8B6B6B]' : 'border-grid-line'
+                      }`}
+                    >
+                      {digit}
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {error && <div className="text-center text-[12px] uppercase tracking-[0.28em] text-[#8B6B6B]">{error}</div>}

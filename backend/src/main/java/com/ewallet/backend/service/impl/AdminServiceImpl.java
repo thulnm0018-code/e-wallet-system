@@ -218,6 +218,7 @@ public void restoreUser(Long userId) {
                 .transactionCode(codeGenerator.generate())
                 .senderWallet(null)
                 .receiverWallet(wallet)
+                .idempotencyOwner(wallet.getUser())
                 .amount(requestTransaction.getAmount())
                 .serviceFee(java.math.BigDecimal.ZERO)
                 .message("Deposit approved")

@@ -28,12 +28,11 @@ import com.ewallet.backend.security.service.CurrentUserService;
 import com.ewallet.backend.service.UserService;
 import com.ewallet.backend.util.OtpUtils;
 import com.ewallet.backend.util.PhoneUtils;
+import com.ewallet.backend.util.OtpSecurity;
+import com.ewallet.backend.enums.OtpPurpose;
+import com.ewallet.backend.service.OtpDeliveryService;
 
 import jakarta.transaction.Transactional;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.multipart.MultipartFile;
@@ -64,8 +63,8 @@ public class UserServiceImpl implements UserService {
     private final TransactionRepository transactionRepository;
     private final CurrentUserService currentUserService;
     private final Path avatarRootLocation;
+    private final OtpDeliveryService otpDeliveryService;
 
-    private static final Logger log = LoggerFactory.getLogger(UserServiceImpl.class);
 
     public UserServiceImpl(UserRepository userRepository,
                            PasswordEncoder passwordEncoder,
@@ -73,6 +72,7 @@ public class UserServiceImpl implements UserService {
                            WalletRepository walletRepository,
                            TransactionRepository transactionRepository,
                            CurrentUserService currentUserService,
+                           OtpDeliveryService otpDeliveryService,
                             @Value("${app.upload.dir}") String uploadDir) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
@@ -80,6 +80,7 @@ public class UserServiceImpl implements UserService {
         this.walletRepository = walletRepository;
         this.transactionRepository = transactionRepository;
         this.currentUserService = currentUserService;
+        this.otpDeliveryService = otpDeliveryService;
         String dir = uploadDir;
         if (dir == null || dir.isBlank()) {
             dir = System.getProperty("java.io.tmpdir") + "/avatars";
@@ -173,29 +174,19 @@ public void unlockUser(Long id) {
 
         User savedUser = userRepository.save(user);
 
-        Wallet wallet = Wallet.builder()
-                .user(savedUser)
-                .balance(BigDecimal.ZERO)
-                .walletStatus(WalletStatus.ACTIVE)
-                .build();
-        walletRepository.save(Objects.requireNonNull(wallet));
-        savedUser.setWallet(wallet);
-        userRepository.save(savedUser);
-
         String otpCode = OtpUtils.generateOtp();
 
         Otp otp = Otp.builder()
                 .user(savedUser)
-                .otpCode(otpCode)
+                .otpCode(OtpSecurity.hash(otpCode))
+                .purpose(OtpPurpose.ACCOUNT_ACTIVATION)
                 .verified(false)
                 .expiredAt(LocalDateTime.now().plusMinutes(5))
                 .build();
 
         otpRepository.save(Objects.requireNonNull(otp));
 
-        log.info("==========================================");
-        log.info("MA OTP KiCH HOAT TAI KHOAN CHO [{}]: {}", phone, otpCode);
-        log.info("==========================================");
+        deliverOtp(savedUser.getEmail(), otpCode, "account activation");
 
         return UserResponse.fromEntity(savedUser);
     }
@@ -233,13 +224,14 @@ public void unlockUser(Long id) {
 
         Otp otp = Otp.builder()
                 .user(user)
-                .otpCode(otpCode)
+                .otpCode(OtpSecurity.hash(otpCode))
+                .purpose(OtpPurpose.PASSWORD_RESET)
                 .verified(false)
                 .expiredAt(LocalDateTime.now().plusMinutes(10))
                 .build();
 
         otpRepository.save(Objects.requireNonNull(otp));
-        log.info("Password reset OTP for {}: {}", identifier, otpCode);
+        deliverOtp(user.getEmail(), otpCode, "password reset");
     }
 
     @Override
@@ -253,7 +245,7 @@ public void unlockUser(Long id) {
         String newPassword = normalizeRequiredText(request.getNewPassword(), "New password");
 
         User user = resolveUserByIdentifier(identifier);
-        Otp otp = otpRepository.findTopByUserOrderByCreatedAtDesc(user)
+        Otp otp = otpRepository.findTopByUserAndPurposeOrderByCreatedAtDesc(user, OtpPurpose.PASSWORD_RESET)
                 .orElseThrow(() -> new NotFoundException("No password reset OTP found"));
 
         if (otp.isVerified()) {
@@ -262,8 +254,7 @@ public void unlockUser(Long id) {
         if (otp.getExpiredAt().isBefore(LocalDateTime.now())) {
             throw new BadRequestException("OTP expired");
         }
-        if (otp.getAmount() != null || otp.getReceiverPhone() != null
-                || !otp.getOtpCode().equals(request.getOtpCode())) {
+        if (!OtpSecurity.matches(request.getOtpCode(), otp.getOtpCode())) {
             throw new BadRequestException("Invalid OTP");
         }
 
@@ -271,6 +262,13 @@ public void unlockUser(Long id) {
         otp.setVerified(true);
         otpRepository.save(otp);
         userRepository.save(user);
+    }
+
+    private void deliverOtp(String email, String otpCode, String purpose) {
+        if (otpDeliveryService == null) {
+            throw new BadRequestException("OTP email delivery is not configured");
+        }
+        otpDeliveryService.send(email, otpCode, purpose);
     }
 
     @Override

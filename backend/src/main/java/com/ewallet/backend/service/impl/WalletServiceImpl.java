@@ -35,9 +35,12 @@ import com.ewallet.backend.repository.WithdrawalRequestRepository;
 import com.ewallet.backend.repository.OtpRepository;
 import com.ewallet.backend.security.service.CurrentUserService;
 import com.ewallet.backend.service.WalletService;
+import com.ewallet.backend.service.OtpDeliveryService;
 import com.ewallet.backend.util.PhoneUtils;
 import com.ewallet.backend.util.TransactionCodeGenerator;
 import com.ewallet.backend.util.OtpUtils;
+import com.ewallet.backend.util.OtpSecurity;
+import com.ewallet.backend.enums.OtpPurpose;
 import com.ewallet.backend.exception.NotFoundException;
 import com.ewallet.backend.exception.BadRequestException;
 import com.ewallet.backend.exception.ForbiddenException;
@@ -73,6 +76,7 @@ public class WalletServiceImpl implements WalletService {
     private final WithdrawalRequestRepository withdrawalRequestRepository;
     private final AuditLogService auditLogService;
     private final RabbitProducerService rabbitProducerService;
+        private final OtpDeliveryService otpDeliveryService;
     private final ConcurrentHashMap<String, Boolean>processingTransfers = new ConcurrentHashMap<>();
 
     private static final BigDecimal MIN_TRANSFER_AMOUNT =new BigDecimal("1.00");
@@ -93,7 +97,8 @@ public class WalletServiceImpl implements WalletService {
             SuspiciousActivityService suspiciousActivityService,
             WithdrawalRequestRepository withdrawalRequestRepository,
             AuditLogService auditLogService,
-            RabbitProducerService rabbitProducerService) {
+            RabbitProducerService rabbitProducerService,
+            OtpDeliveryService otpDeliveryService) {
 
         this.walletRepository = walletRepository;
         this.transactionRepository = transactionRepository;
@@ -104,7 +109,8 @@ public class WalletServiceImpl implements WalletService {
         this.suspiciousActivityService = suspiciousActivityService;
         this.withdrawalRequestRepository = withdrawalRequestRepository;
         this.auditLogService = auditLogService;
-        this.rabbitProducerService = rabbitProducerService;}
+        this.rabbitProducerService = rabbitProducerService;
+        this.otpDeliveryService = otpDeliveryService;}
 
     private static final Logger log = LoggerFactory.getLogger(WalletServiceImpl.class);
     @Override
@@ -155,7 +161,8 @@ public class WalletServiceImpl implements WalletService {
 
         Otp otp = Otp.builder()
             .user(senderWallet.getUser())
-            .otpCode(otpCode)
+            .otpCode(OtpSecurity.hash(otpCode))
+            .purpose(OtpPurpose.TRANSFER)
             .verified(false)
             .expiredAt(LocalDateTime.now().plusMinutes(5))
             .amount(request.getAmount())
@@ -163,6 +170,10 @@ public class WalletServiceImpl implements WalletService {
             .build();
 
         otpRepository.save(Objects.requireNonNull(otp));
+                if (otpDeliveryService == null) {
+                        throw new BadRequestException("OTP email delivery is not configured");
+                }
+                otpDeliveryService.send(senderWallet.getUser().getEmail(), otpCode, "transfer");
         
        
 
@@ -194,10 +205,7 @@ public class WalletServiceImpl implements WalletService {
         if (idempotencyKey != null
                 && !idempotencyKey.isBlank()) {
 
-            Optional<Transaction> existingTransaction =
-                    transactionRepository.findByIdempotencyKey(
-                            idempotencyKey
-                    );
+            Optional<Transaction> existingTransaction = findExistingTransaction(idempotencyKey, senderUserId);
 
             if (existingTransaction.isPresent()) {
 
@@ -228,8 +236,9 @@ try {
         validateUserStatus(senderWalletTemp.getUser());
         validateProfileCompletion(senderWalletTemp.getUser());
 
-        Otp otp = otpRepository
-            .findTopByUserOrderByCreatedAtDesc(senderWalletTemp.getUser())
+                Otp otp = otpRepository
+                        .findTopByUserAndPurposeOrderByCreatedAtDesc(senderWalletTemp.getUser(), OtpPurpose.TRANSFER)
+                        .or(() -> otpRepository.findTopByUserOrderByCreatedAtDesc(senderWalletTemp.getUser()))
             .orElseThrow(() -> new BadRequestException("No OTP found. Please initiate transfer first."));
 
         // Ensure OTP was generated for this exact transfer (amount + receiver)
@@ -247,7 +256,8 @@ try {
             throw new BadRequestException("OTP already used");
         }
 
-        if (!otp.getOtpCode().equals(request.getOtpCode())) {
+        if (!OtpSecurity.matches(request.getOtpCode(), otp.getOtpCode())
+                && !request.getOtpCode().equals(otp.getOtpCode())) {
             Integer attempts = otp.getFailedAttempts() == null ? 0 : otp.getFailedAttempts();
             attempts++;
             otp.setFailedAttempts(attempts);
@@ -312,6 +322,7 @@ try {
                 .serviceFee(fee)
                 .transactionCode(codeGenerator.generate())
                 .idempotencyKey(idempotencyKey)
+                .idempotencyOwner(senderWallet.getUser())
                 .senderWallet(senderWallet)
                 .receiverWallet(receiverWallet)
                 .amount(request.getAmount())
@@ -403,6 +414,17 @@ finally {
                                 .setScale(2, java.math.RoundingMode.HALF_UP);
         }
 
+        private Optional<Transaction> findExistingTransaction(String idempotencyKey, Long userId) {
+                Optional<Transaction> scoped = transactionRepository
+                        .findByIdempotencyKeyAndIdempotencyOwner_Id(idempotencyKey, userId);
+                if (scoped.isPresent()) {
+                        return scoped;
+                }
+                return transactionRepository.findByIdempotencyKey(idempotencyKey)
+                        .filter(transaction -> transaction.getIdempotencyOwner() == null
+                                || transaction.getIdempotencyOwner().getId().equals(userId));
+        }
+
     @Override
     @Transactional
     public TransactionResponse depositMoney(DepositRequest request) {
@@ -420,10 +442,7 @@ finally {
         if (idempotencyKey != null
                 && !idempotencyKey.isBlank()) {
 
-            Optional<Transaction> existingTransaction =
-                    transactionRepository.findByIdempotencyKey(
-                            idempotencyKey
-                    );
+            Optional<Transaction> existingTransaction = findExistingTransaction(idempotencyKey, userId);
 
             if (existingTransaction.isPresent()) {
                 return transactionMapper.toResponse(existingTransaction.get());
@@ -471,6 +490,7 @@ finally {
         Transaction requestTransaction = Transaction.builder()
                 .transactionCode(codeGenerator.generate())
                 .idempotencyKey(idempotencyKey)
+                .idempotencyOwner(lockedWallet.getUser())
                 .senderWallet(null)
                 .receiverWallet(lockedWallet)
                 .amount(request.getAmount())
@@ -506,10 +526,7 @@ finally {
         if (idempotencyKey != null
                 && !idempotencyKey.isBlank()) {
 
-            Optional<Transaction> existingTransaction =
-                    transactionRepository.findByIdempotencyKey(
-                            idempotencyKey
-                    );
+            Optional<Transaction> existingTransaction = findExistingTransaction(idempotencyKey, userId);
 
             if (existingTransaction.isPresent()) {
                 return transactionMapper.toResponse(
@@ -566,6 +583,7 @@ finally {
         WithdrawalRequest.builder()
                 .user(lockedWallet.getUser())
                 .amount(request.getAmount())
+                                .reservedAmount(totalDebit)
                 .status(WithdrawalStatus.PENDING)
                 .idempotencyKey(
                         idempotencyKey
@@ -576,6 +594,9 @@ finally {
         withdrawalRequestRepository.save(
                 Objects.requireNonNull(withdrawalRequest)
         );
+
+        lockedWallet.setBalance(lockedWallet.getBalance().subtract(totalDebit));
+        walletRepository.save(lockedWallet);
 
     rabbitProducerService.sendNotification(
         NotificationMessage.builder()
@@ -614,6 +635,7 @@ finally {
     Transaction transaction = Transaction.builder()
             .transactionCode(codeGenerator.generate())
             .idempotencyKey(idempotencyKey)
+            .idempotencyOwner(lockedWallet.getUser())
             .senderWallet(lockedWallet)
             .receiverWallet(null)
             .amount(request.getAmount())

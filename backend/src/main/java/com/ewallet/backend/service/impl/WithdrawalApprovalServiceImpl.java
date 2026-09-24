@@ -101,35 +101,21 @@ public class WithdrawalApprovalServiceImpl
             );
         }
 
-        Wallet wallet =
-                walletRepository
-                        .findByUser_Id(
-                                request.getUser().getId()
-                        )
-                        .orElseThrow(() ->
-                                new NotFoundException(
-                                        "Wallet not found"
-                                ));
+        Wallet wallet = findWalletForUpdate(request.getUser().getId());
 
-        BigDecimal withdrawalFee = request.getAmount()
-                .multiply(WITHDRAWAL_FEE_RATE)
-                .setScale(2, RoundingMode.HALF_UP);
-        BigDecimal totalDebit = request.getAmount().add(withdrawalFee);
+        BigDecimal withdrawalFee = request.getReservedAmount().subtract(request.getAmount());
 
-        if (wallet.getBalance()
-                .compareTo(totalDebit) < 0) {
-
-            throw new BadRequestException(
-                    "Insufficient balance"
-            );
-        }
-
-        wallet.setBalance(
-                wallet.getBalance()
-                        .subtract(totalDebit)
-        );
-
-        walletRepository.save(wallet);
+                if (request.getReservedAmount().compareTo(BigDecimal.ZERO) == 0) {
+                        withdrawalFee = request.getAmount()
+                                        .multiply(WITHDRAWAL_FEE_RATE)
+                                        .setScale(2, RoundingMode.HALF_UP);
+                        BigDecimal totalDebit = request.getAmount().add(withdrawalFee);
+                        if (wallet.getBalance().compareTo(totalDebit) < 0) {
+                                throw new BadRequestException("Insufficient balance");
+                        }
+                        wallet.setBalance(wallet.getBalance().subtract(totalDebit));
+                        walletRepository.save(wallet);
+                }
 
         Transaction transaction =
         Transaction.builder()
@@ -140,6 +126,7 @@ public class WithdrawalApprovalServiceImpl
                 .receiverWallet(null)
                 .amount(request.getAmount())
                 .serviceFee(withdrawalFee)
+                .idempotencyKey(request.getIdempotencyKey())
                 .message(
                         "Approved withdrawal"
                 )
@@ -204,6 +191,13 @@ transactionRepository.save(transaction);
             );
         }
 
+        BigDecimal reservedAmount = request.getReservedAmount();
+        if (reservedAmount.compareTo(BigDecimal.ZERO) > 0) {
+                        Wallet wallet = findWalletForUpdate(request.getUser().getId());
+            wallet.setBalance(wallet.getBalance().add(reservedAmount));
+            walletRepository.save(wallet);
+        }
+
         request.setStatus(
                 WithdrawalStatus.REJECTED
         );
@@ -235,4 +229,10 @@ transactionRepository.save(transaction);
                         + request.getAmount()
         );
     }
+
+        private Wallet findWalletForUpdate(Long userId) {
+                return walletRepository.findByUserIdForUpdate(userId)
+                                .or(() -> walletRepository.findByUser_Id(userId))
+                                .orElseThrow(() -> new NotFoundException("Wallet not found"));
+        }
 }

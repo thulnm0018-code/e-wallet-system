@@ -48,7 +48,7 @@ export function Send() {
   const [otpTimeLeft, setOtpTimeLeft] = useState(0);
 
   // OTP inputs ref for autofocus
-  const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const otpInputRef = useRef<HTMLInputElement | null>(null);
   const profileComplete = Boolean(user?.address?.trim()) && Boolean(user?.dateOfBirth);
   const senderName = user?.name?.trim() || 'Current account';
   const receiptRef = useRef<HTMLDivElement>(null);
@@ -226,26 +226,13 @@ if (userData) {
   }, [otpTimeLeft]);
 
   // Handle OTP digit changes
-  const handleOtpChange = (value: string, index: number) => {
-    if (isNaN(Number(value))) return;
-    
-    const newOtp = [...otp];
-    newOtp[index] = value.substring(value.length - 1);
-    setOtp(newOtp);
+  const handleOtpChange = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 6);
+    setOtp(Array.from({ length: 6 }, (_, index) => digits[index] || ''));
     setSystemError(null);
-
-    // Auto-focus next input
-    if (value && index < 5) {
-      otpRefs.current[index + 1]?.focus();
-    }
   };
 
-  // Handle OTP key down (for backspace navigation)
-  const handleOtpKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
-      otpRefs.current[index - 1]?.focus();
-    }
-  };
+  const focusOtpInput = () => otpInputRef.current?.focus();
 
   // Step navigation helpers
   const handleRecipientNext = () => {
@@ -682,18 +669,24 @@ if (userData) {
                 Enter 6-Digit OTP Code
               </label>
               
-              <div className="flex justify-between gap-2 max-w-[360px] mx-auto">
+              <div className="relative flex justify-between gap-2 max-w-[360px] mx-auto" onClick={focusOtpInput}>
+                <input
+                  ref={otpInputRef}
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={otp.join('')}
+                  onChange={(e) => handleOtpChange(e.target.value)}
+                  disabled={isSubmitting}
+                  aria-label="6-digit OTP code"
+                  className="absolute inset-0 z-10 h-full w-full cursor-text opacity-0"
+                />
                 {otp.map((digit, idx) => (
-                  <input
+                  <div
                     key={idx}
-                    type="text"
-                    maxLength={1}
-                    value={digit}
-                    ref={(el) => { otpRefs.current[idx] = el; }}
-                    onChange={(e) => handleOtpChange(e.target.value, idx)}
-                    onKeyDown={(e) => handleOtpKeyDown(e, idx)}
-                    className="w-12 h-14 bg-transparent border border-grid-line focus:border-charcoal-black focus:outline-none text-center text-[20px] font-bold font-mono text-charcoal-black select-all"
-                  />
+                    className="flex h-14 w-12 items-center justify-center border border-grid-line bg-transparent text-center font-mono text-[20px] font-bold leading-none text-charcoal-black select-none"
+                  >{digit}</div>
                 ))}
               </div>
 

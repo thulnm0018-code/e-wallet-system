@@ -53,6 +53,10 @@ public class WithdrawalRequest {
     )
     private BigDecimal amount;
 
+        @Column(name = "reserved_amount", nullable = false, precision = 15, scale = 2)
+        @Builder.Default
+        private BigDecimal reservedAmount = BigDecimal.ZERO;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private WithdrawalStatus status;
@@ -60,7 +64,6 @@ public class WithdrawalRequest {
     
         @Column(
                 name = "idempotency_key",
-                unique = true,
                 length = 100
         )
         private String idempotencyKey;

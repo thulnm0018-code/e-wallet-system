@@ -52,10 +52,13 @@ public class Transaction {
 
     @Column(
     name = "idempotency_key",
-    unique = true,
     length = 100
 )
 private String idempotencyKey;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "idempotency_owner_user_id")
+    private User idempotencyOwner;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "sender_wallet_id")

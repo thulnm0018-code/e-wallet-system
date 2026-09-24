@@ -18,6 +18,10 @@ public interface WalletRepository extends JpaRepository<Wallet, Long> {
 
     Optional<Wallet> findByUser_Id(Long userId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT w FROM Wallet w WHERE w.user.id = :userId")
+    Optional<Wallet> findByUserIdForUpdate(@Param("userId") Long userId);
+
     Optional<Wallet> findByUser_Phone(String phone);
 
     Optional<Wallet> findByUser_Email(String email);

@@ -53,6 +53,13 @@ const obfuscateTransactionReference = (rawId: string | number) => {
   return `TXN-${normalized}`;
 };
 
+const createIdempotencyKey = (operation: string) => {
+  const randomPart = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `${operation}-${randomPart}`;
+};
+
 const mapBackendTransaction = (tx: any, userPhone: string): Transaction => {
   let type: 'send' | 'receive' | 'deposit' | 'withdraw' = 'send';
   let sender = tx.senderPhone;
@@ -148,7 +155,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         receiverPhone,
         amount,
         message,
-        otpCode
+        otpCode,
+        idempotencyKey: createIdempotencyKey('transfer')
       });
       await refreshWallet();
       return res;
@@ -162,7 +170,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const res = await api.post('/wallets/deposit', {
         amount,
         message,
-        paymentMethod
+        paymentMethod,
+        idempotencyKey: createIdempotencyKey('deposit')
       });
       await refreshWallet();
       return res;
@@ -175,7 +184,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       const res = await api.post('/wallets/withdraw', {
         amount,
-        message
+        message,
+        idempotencyKey: createIdempotencyKey('withdraw')
       });
       await refreshWallet();
       return res;
